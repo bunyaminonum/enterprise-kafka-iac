@@ -1,0 +1,51 @@
+---
+# Transport Layer Security (TLS)
+ssl_enabled: true
+ssl_mutual_auth_enabled: false
+ssl_custom_certs: true
+ssl_ca_cert_filepath: "{{ cp_repo_dir }}/pki/ca/ca.crt"
+ssl_signed_cert_filepath: "{{ cp_repo_dir }}/pki/certs/{{ inventory_hostname }}-signed.crt"
+ssl_key_filepath: "{{ cp_repo_dir }}/pki/certs/{{ inventory_hostname }}-key.pem"
+
+# Server-to-Server Authentication (Kerberos / GSSAPI)
+sasl_protocol: kerberos
+kafka_controller_sasl_protocol: kerberos
+
+kerberos:
+  realm: "{{ cp_realm }}"
+  kdc_hostname: "{{ cp_infra_host }}"
+  admin_hostname: "{{ cp_infra_host }}"
+  dns_lookup_realm: false
+  dns_lookup_kdc: false
+  ticket_lifetime: 24h
+  forwardable: true
+  udp_preference_limit: 1
+  default_tkt_enctypes: "aes256-cts-hmac-sha384-192 aes128-cts-hmac-sha256-128"
+  default_tgs_enctypes: "aes256-cts-hmac-sha384-192 aes128-cts-hmac-sha256-128"
+  permitted_enctypes: "aes256-cts-hmac-sha384-192 aes128-cts-hmac-sha256-128"
+  canonicalize: false
+  allow_weak_crypto: false
+
+kafka_broker_kerberos_principal: "kafka/{{ inventory_hostname }}.{{ cp_domain }}@{{ cp_realm }}"
+kafka_broker_kerberos_keytab_path: "{{ cp_repo_dir }}/pki/keytabs/{{ inventory_hostname }}-kafka_broker.keytab"
+kafka_controller_kerberos_principal: "kafka/{{ inventory_hostname }}.{{ cp_domain }}@{{ cp_realm }}"
+kafka_controller_kerberos_keytab_path: "{{ cp_repo_dir }}/pki/keytabs/{{ inventory_hostname }}-kafka_controller.keytab"
+
+# Listener Layout: INTERNAL (OAuth Client) vs BROKER (Kerberos Inter-Broker)
+kafka_broker_custom_listeners:
+  internal:
+    name: INTERNAL
+    port: 9092
+    ssl_enabled: true
+    ssl_mutual_auth_enabled: false
+    ssl_client_authentication: none
+    principal_mapping_rules: ["DEFAULT"]
+    sasl_protocol: OAUTH
+  broker:
+    name: BROKER
+    port: 9091
+    ssl_enabled: true
+    ssl_mutual_auth_enabled: false
+    ssl_client_authentication: none
+    principal_mapping_rules: ["DEFAULT"]
+    sasl_protocol: kerberos

@@ -1,0 +1,36 @@
+---
+# Preflight Verification & Accidental Deployment Safeguard
+- name: Execute Safety Guardrails
+  hosts: all
+  gather_facts: false
+  run_once: true
+  tasks:
+    - name: Enforce Explicit Confirmation for Critical Environments
+      ansible.builtin.fail:
+        msg: >-
+          FATAL: Targeted environment is '{{ environment_name }}'.
+          Deploying to critical environments requires explicit confirmation.
+          Append '-e confirm_env={{ environment_name }}' to your ansible-playbook execution.
+      when:
+        - environment_name in ['production', 'preprod']
+        - confirm_env is not defined or confirm_env != environment_name
+
+    - name: Validate Deployment Configuration Variables
+      ansible.builtin.assert:
+        that:
+          - confluent_package_version == "8.3.1"
+          - java_version == 21
+          - environment_name is defined
+        fail_msg: "Preflight assertion failed: Baseline variables are missing or corrupted."
+        success_msg: "Preflight verification passed for environment '{{ environment_name }}'."
+
+- name: Validate Controller and Broker Node IDs
+  hosts: kafka_controller,kafka_broker
+  gather_facts: false
+  tasks:
+    - name: Ensure Node ID is Assigned
+      ansible.builtin.assert:
+        that:
+          - node_id is defined
+          - node_id | int > 0
+        fail_msg: "Host '{{ inventory_hostname }}' is missing a valid numeric 'node_id'."

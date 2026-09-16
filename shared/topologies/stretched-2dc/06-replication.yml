@@ -1,0 +1,10 @@
+---
+# Stretched Dual-Datacenter Topology Replication Defaults
+kafka_broker_custom_properties:
+  default.replication.factor: 3
+  offsets.topic.replication.factor: 4
+  transaction.state.log.replication.factor: 4
+  transaction.state.log.min.isr: 2
+  min.insync.replicas: 2
+  log.retention.hours: 168
+  confluent.balancer.enable: "true"

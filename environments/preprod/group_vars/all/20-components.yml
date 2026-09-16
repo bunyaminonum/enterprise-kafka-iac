@@ -1,0 +1,8 @@
+---
+# Environment: preprod (Stretched Cluster Mirror)
+environment_name: "preprod"
+
+# Stretched cluster internal configuration
+kafka_broker_custom_properties:
+  log.retention.hours: 168
+  unclean.leader.election.enable: "false"

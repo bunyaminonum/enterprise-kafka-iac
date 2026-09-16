@@ -1,0 +1,12 @@
+---
+# Environment: dr (Independent Disaster Recovery Cluster)
+environment_name: "dr"
+
+# Standalone 3-node cluster overrides (independent quorum)
+kafka_broker_custom_properties:
+  default.replication.factor: 3
+  offsets.topic.replication.factor: 3
+  transaction.state.log.replication.factor: 3
+  transaction.state.log.min.isr: 2
+  min.insync.replicas: 2
+  log.retention.hours: 168

@@ -1,0 +1,20 @@
+# Ansible runtime & temporary files
+*.retry
+*.pyc
+__pycache__/
+.ansible/
+.vault_pass*
+
+# Upstream collection binaries (installed dynamically via requirements.yml)
+collections/ansible_collections/
+
+# Ephemeral keys, certificates, and secrets
+*.key
+*.pem
+*.jks
+!pki/ca/ca.crt
+
+# Environment-specific secrets & runtime logs
+*.env
+*.log
+*.swp

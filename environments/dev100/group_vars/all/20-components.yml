@@ -1,0 +1,7 @@
+---
+# Environment: dev100 (Local Sandbox)
+environment_name: "dev100"
+
+# Local overrides
+kafka_broker_custom_properties:
+  log.retention.hours: 12

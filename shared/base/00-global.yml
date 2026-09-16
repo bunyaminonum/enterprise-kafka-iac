@@ -1,0 +1,25 @@
+---
+# Installation Method: Archive (Tarball) - 8.3.1
+installation_method: archive
+confluent_package_version: "8.3.1"
+archive_destination_path: /opt/confluent
+
+confluent_archive_file_remote: false
+confluent_archive_file_source: "{{ cp_repo_dir }}/packages/confluent-{{ confluent_package_version }}.tar.gz"
+
+confluent_control_center_next_gen_package_version: 2.2.0
+confluent_archive_control_center_next_gen_file_remote: false
+confluent_archive_control_center_next_gen_file_source: "{{ cp_repo_dir }}/packages/confluent-control-center-next-gen-{{ confluent_control_center_next_gen_package_version }}.tar.gz"
+
+redhat_java_package_name: java-21-openjdk-headless
+
+# Deployment & Engine Defaults
+deployment_strategy: rolling
+ansible_python_interpreter: /usr/bin/python3.11
+
+# Dynamic KRaft Quorum Resolution
+kafka_controller_port: 9093
+kafka_controller_quorum_voters: >-
+  {%- for h in groups['kafka_controller'] -%}
+  {{ hostvars[h].node_id }}@{{ h }}:{{ kafka_controller_port }}{{ '' if loop.last else ',' }}
+  {%- endfor -%}

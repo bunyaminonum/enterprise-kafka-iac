@@ -1,0 +1,6 @@
+---
+# Environment: qa (Quality Assurance & Performance)
+environment_name: "qa"
+
+kafka_broker_custom_properties:
+  log.retention.hours: 72

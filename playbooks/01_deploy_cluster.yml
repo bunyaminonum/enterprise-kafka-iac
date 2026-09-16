@@ -1,0 +1,44 @@
+---
+# Master Confluent Platform 8.3.1 Deployment
+
+- name: Deploy KRaft Quorum Controllers
+  hosts: kafka_controller
+  tasks:
+    - name: Execute Controller Role
+      ansible.builtin.import_role:
+        name: confluent.platform.kafka_controller
+
+- name: Deploy Kafka Brokers
+  hosts: kafka_broker
+  tasks:
+    - name: Execute Broker Role
+      ansible.builtin.import_role:
+        name: confluent.platform.kafka_broker
+
+- name: Deploy Schema Registry Instances
+  hosts: schema_registry
+  tasks:
+    - name: Execute Schema Registry Role
+      ansible.builtin.import_role:
+        name: confluent.platform.schema_registry
+
+- name: Deploy Kafka Connect Workers
+  hosts: kafka_connect
+  tasks:
+    - name: Execute Kafka Connect Role
+      ansible.builtin.import_role:
+        name: confluent.platform.kafka_connect
+
+- name: Deploy Confluent REST Proxy Gateway
+  hosts: kafka_rest
+  tasks:
+    - name: Execute Kafka REST Role
+      ansible.builtin.import_role:
+        name: confluent.platform.kafka_rest
+
+- name: Deploy Control Center Next Gen
+  hosts: control_center_next_gen
+  tasks:
+    - name: Execute Control Center Next Gen Role
+      ansible.builtin.import_role:
+        name: confluent.platform.control_center_next_gen

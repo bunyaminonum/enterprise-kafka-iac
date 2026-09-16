@@ -1,0 +1,6 @@
+---
+# Environment: test (Integration Testing)
+environment_name: "test"
+
+kafka_broker_custom_properties:
+  log.retention.hours: 48

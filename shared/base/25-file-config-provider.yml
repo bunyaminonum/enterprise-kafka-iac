@@ -1,0 +1,15 @@
+---
+# FileConfigProvider Integration
+kafka_broker_custom_properties:
+  config.providers: file
+  config.providers.file.class: org.apache.kafka.common.config.provider.FileConfigProvider
+  ldap.java.naming.security.credentials: "${file:/var/ssl/private/security.properties:ldap_bind_password}"
+
+kafka_connect_custom_properties:
+  config.providers: file
+  config.providers.file.class: org.apache.kafka.common.config.provider.FileConfigProvider
+  connector.client.config.override.policy: All
+  key.converter.basic.auth.credentials.source: USER_INFO
+  key.converter.schema.registry.basic.auth.user.info: "{{ kafka_connect_ldap_user }}:${file:/var/ssl/private/security.properties:kafka_connect_ldap_password}"
+  value.converter.basic.auth.credentials.source: USER_INFO
+  value.converter.schema.registry.basic.auth.user.info: "{{ kafka_connect_ldap_user }}:${file:/var/ssl/private/security.properties:kafka_connect_ldap_password}"

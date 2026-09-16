@@ -1,0 +1,8 @@
+---
+environment_name: "dev100"
+cp_domain: lab.local
+cp_realm: LAB.LOCAL
+cp_ldap_base: "dc=lab,dc=local"
+cp_cluster_name: cp-lab
+cp_repo_dir: /opt/confluent-platform-lab
+cp_infra_host: cp-node1
