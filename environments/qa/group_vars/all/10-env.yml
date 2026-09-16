@@ -1,0 +1,8 @@
+---
+environment_name: "qa"
+cp_domain: qa.internal.net
+cp_realm: QA.INTERNAL.NET
+cp_ldap_base: "dc=qa,dc=internal,dc=net"
+cp_cluster_name: cp-qa
+cp_repo_dir: /opt/confluent-platform
+cp_infra_host: qa-controller-01.internal.net

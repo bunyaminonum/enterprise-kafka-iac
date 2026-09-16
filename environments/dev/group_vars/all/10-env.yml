@@ -1,0 +1,8 @@
+---
+environment_name: "dev"
+cp_domain: dev.internal.net
+cp_realm: DEV.INTERNAL.NET
+cp_ldap_base: "dc=dev,dc=internal,dc=net"
+cp_cluster_name: cp-dev
+cp_repo_dir: /opt/confluent-platform
+cp_infra_host: dev-controller-01.internal.net

@@ -1,0 +1,8 @@
+---
+environment_name: "test"
+cp_domain: test.internal.net
+cp_realm: TEST.INTERNAL.NET
+cp_ldap_base: "dc=test,dc=internal,dc=net"
+cp_cluster_name: cp-test
+cp_repo_dir: /opt/confluent-platform
+cp_infra_host: test-controller-01.internal.net

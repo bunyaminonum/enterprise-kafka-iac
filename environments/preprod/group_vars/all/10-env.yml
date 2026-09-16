@@ -1,0 +1,8 @@
+---
+environment_name: "preprod"
+cp_domain: preprod.internal.net
+cp_realm: PREPROD.INTERNAL.NET
+cp_ldap_base: "dc=preprod,dc=internal,dc=net"
+cp_cluster_name: cp-preprod
+cp_repo_dir: /opt/confluent-platform
+cp_infra_host: preprod-dc1-ctrl-01.internal.net

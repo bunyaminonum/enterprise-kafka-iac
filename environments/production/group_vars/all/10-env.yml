@@ -1,0 +1,8 @@
+---
+environment_name: "production"
+cp_domain: prod.internal.net
+cp_realm: PROD.INTERNAL.NET
+cp_ldap_base: "dc=prod,dc=internal,dc=net"
+cp_cluster_name: cp-production
+cp_repo_dir: /opt/confluent-platform
+cp_infra_host: prod-dc1-ctrl-01.internal.net

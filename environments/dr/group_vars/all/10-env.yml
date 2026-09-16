@@ -1,0 +1,8 @@
+---
+environment_name: "dr"
+cp_domain: dr.internal.net
+cp_realm: DR.INTERNAL.NET
+cp_ldap_base: "dc=dr,dc=internal,dc=net"
+cp_cluster_name: cp-dr
+cp_repo_dir: /opt/confluent-platform
+cp_infra_host: dr-ctrl-01.internal.net
