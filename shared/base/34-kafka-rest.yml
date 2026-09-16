@@ -1,0 +1,8 @@
+---
+# LAYER 1 - REST Proxy
+iac_kafka_rest_heap: "-Xms1g -Xmx1g"
+
+kafka_rest_service_environment_overrides:
+  KAFKAREST_HEAP_OPTS: "{{ iac_kafka_rest_heap }} {{ iac_jvm_g1_opts }}"
+
+kafka_rest_custom_properties: {}

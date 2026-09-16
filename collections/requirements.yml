@@ -1,4 +1,29 @@
 ---
+# cp-ansible is consumed as-is (no fork). Only its version is pinned here.
+# Air-gapped: artifacts come from internal repositories; nothing is resolved from public Galaxy.
+#
+# Upgrading cp-ansible is ONE pull request that changes:
+#   1. the collection version below
+#   2. iac_cp_ansible_version in shared/base/00-platform.yml   (preflight enforces that both match)
+# The pull request pipeline renders the effective configuration of every environment before and
+# after the change (scripts/config-diff.sh), so reviewers see exactly what the upgrade changes.
 collections:
-  - name: confluent.platform
-    version: "8.3.1"
+  # Option A (default): tarballs published to a Nexus raw repository.
+  #   confluent-platform-8.3.1.tar.gz -> built from tag v8.3.1 with `ansible-galaxy collection build`
+  #                                      or downloaded from Ansible Galaxy / Automation Hub
+  - name: https://nexus.internal.net/repository/ansible-raw/confluent-platform-8.3.1.tar.gz
+    type: url
+  # confluent.platform declares ansible.posix as a dependency. It is listed explicitly because
+  # scripts/bootstrap.sh installs with --no-deps (no dependency resolution against public Galaxy).
+  - name: https://nexus.internal.net/repository/ansible-raw/ansible-posix-2.1.0.tar.gz
+    type: url
+  # NOT declared by confluent.platform, but required: playbooks/support_bundle.yml and
+  # roles/common/tasks/fetch_logs.yml use the `archive` module, which ansible-core redirects to
+  # community.general.archive. 12.x supports ansible-core >= 2.17.
+  - name: https://nexus.internal.net/repository/ansible-raw/community-general-12.6.5.tar.gz
+    type: url
+
+  # Option B: Bitbucket mirror of github.com/confluentinc/cp-ansible, pinned to the release tag.
+  # - name: https://bitbucket.internal.net/scm/platform/cp-ansible.git
+  #   type: git
+  #   version: v8.3.1

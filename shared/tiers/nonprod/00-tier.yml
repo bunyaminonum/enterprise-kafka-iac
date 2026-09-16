@@ -1,0 +1,17 @@
+---
+# =============================================================================
+# LAYER 2a - TIER: nonprod        (dev100, dev, test, qa)
+# What differs between non-production and production CLASSES of environments: capacity and retention.
+# Replication is NOT lowered here: every nonprod cluster has three brokers, and a lower replication
+# factor would turn every broker restart into an outage.
+# =============================================================================
+iac_tier: nonprod
+iac_kafka_controller_heap: "-Xms1g -Xmx1g"
+iac_kafka_broker_heap: "-Xms3g -Xmx3g"
+iac_schema_registry_heap: "-Xms512m -Xmx768m"
+iac_kafka_connect_heap: "-Xms512m -Xmx1g"
+iac_kafka_rest_heap: "-Xms256m -Xmx512m"
+iac_control_center_heap: "-Xmx3g"
+
+kafka_broker_custom_properties:
+  log.retention.hours: 72

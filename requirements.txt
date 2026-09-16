@@ -1,0 +1,6 @@
+# Python dependencies of the Ansible control node (installed by scripts/bootstrap.sh).
+# In the air-gapped network pip resolves them through the Nexus PyPI proxy (PIP_INDEX_URL).
+# cp-ansible 8.3.1 requires ansible-core >= 2.16 (meta/runtime.yml). This repository is validated with 2.18.
+ansible-core~=2.18.0
+# Used by confluent.platform filters on the control node (C3 Prometheus basic-auth password hashing).
+bcrypt

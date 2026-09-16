@@ -1,8 +1,32 @@
 ---
-environment_name: "preprod"
-cp_domain: preprod.internal.net
-cp_realm: PREPROD.INTERNAL.NET
-cp_ldap_base: "dc=preprod,dc=internal,dc=net"
-cp_cluster_name: cp-preprod
-cp_repo_dir: /opt/confluent-platform
-cp_infra_host: preprod-dc1-ctrl-01.internal.net
+# =============================================================================
+# LAYER 3 - ENVIRONMENT IDENTITY: preprod
+# Values that identify the environment and its endpoints. TODO: replace example values.
+# =============================================================================
+iac_env: preprod
+
+# Cluster names (RBAC cluster registry, Control Center)
+kafka_broker_cluster_name: cp-preprod
+schema_registry_cluster_name: cp-preprod-schema-registry
+kafka_connect_cluster_name: cp-preprod-connect
+kafka_connect_group_id: cp-preprod-connect
+
+# Directory services (Active Directory, LDAPS)
+iac_ldap_url: ldaps://ad.preprod.internal.net:636
+iac_ldap_bind_dn: "CN=ldap-bind-user,OU=ServiceAccounts,DC=preprod,DC=internal,DC=net"
+iac_ldap_user_search_base: "OU=Users,DC=preprod,DC=internal,DC=net"
+iac_ldap_group_search_base: "OU=Groups,DC=preprod,DC=internal,DC=net"
+kerberos:                         # merged key by key with the baseline hardening
+  realm: PREPROD.INTERNAL.NET
+  kdc_hostname: ad.preprod.internal.net
+  admin_hostname: ad.preprod.internal.net
+
+# Identity provider (OAuth). Client secrets live in 90-vault.yml.
+iac_oauth_base_url: https://sso.preprod.internal.net/oauth2
+iac_oauth_expected_audience: kafka-preprod
+iac_oauth_client_ids:
+  superuser: kafka-preprod-superuser
+  schema_registry: kafka-preprod-schema-registry
+  kafka_connect: kafka-preprod-connect
+  kafka_rest: kafka-preprod-rest-proxy
+  control_center: kafka-preprod-control-center

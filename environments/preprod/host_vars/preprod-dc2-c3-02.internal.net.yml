@@ -1,0 +1,11 @@
+---
+# LAYER 5 - HOST: second Control Center Next Gen instance (dc2).
+# Per-host settings required by the cp-ansible active-active pattern
+# (docs/sample_inventories/c3-next-gen-active-active-setup in the collection).
+control_center_next_gen_custom_properties:
+  confluent.controlcenter.id: 2
+  confluent.controlcenter.prometheus.url: >-
+    {{ control_center_next_gen_dependency_prometheus_schema }}://{{ inventory_hostname }}:{{ control_center_next_gen_dependency_prometheus_port }}
+  confluent.controlcenter.alertmanager.url: >-
+    {{ control_center_next_gen_dependency_alertmanager_schema }}://{{ inventory_hostname }}:{{ control_center_next_gen_dependency_alertmanager_port }}
+control_center_next_gen_dependency_alertmanager_host: "{{ inventory_hostname }}"

@@ -1,8 +1,32 @@
 ---
-environment_name: "dev100"
-cp_domain: lab.local
-cp_realm: LAB.LOCAL
-cp_ldap_base: "dc=lab,dc=local"
-cp_cluster_name: cp-lab
-cp_repo_dir: /opt/confluent-platform-lab
-cp_infra_host: cp-node1
+# =============================================================================
+# LAYER 3 - ENVIRONMENT IDENTITY: dev100
+# Values that identify the environment and its endpoints. TODO: replace example values.
+# =============================================================================
+iac_env: dev100
+
+# Cluster names (RBAC cluster registry, Control Center)
+kafka_broker_cluster_name: cp-lab
+schema_registry_cluster_name: cp-lab-schema-registry
+kafka_connect_cluster_name: cp-lab-connect
+kafka_connect_group_id: cp-lab-connect
+
+# Directory services (Active Directory, LDAPS)
+iac_ldap_url: ldaps://ad.lab.local:636
+iac_ldap_bind_dn: "CN=ldap-bind-user,OU=ServiceAccounts,DC=lab,DC=local"
+iac_ldap_user_search_base: "OU=Users,DC=lab,DC=local"
+iac_ldap_group_search_base: "OU=Groups,DC=lab,DC=local"
+kerberos:                         # merged key by key with the baseline hardening
+  realm: LAB.LOCAL
+  kdc_hostname: ad.lab.local
+  admin_hostname: ad.lab.local
+
+# Identity provider (OAuth). Client secrets live in 90-vault.yml.
+iac_oauth_base_url: https://sso.lab.local/oauth2
+iac_oauth_expected_audience: kafka-dev100
+iac_oauth_client_ids:
+  superuser: kafka-dev100-superuser
+  schema_registry: kafka-dev100-schema-registry
+  kafka_connect: kafka-dev100-connect
+  kafka_rest: kafka-dev100-rest-proxy
+  control_center: kafka-dev100-control-center

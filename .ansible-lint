@@ -1,0 +1,18 @@
+---
+profile: production
+# Collections are installed by scripts/bootstrap.sh; never download anything during linting.
+offline: true
+# Paths relative to the repository root. ansible-lint follows symlinks to their real location, so these
+# exclusions only apply when the collections are a real directory inside the repository (bootstrap.sh does that).
+exclude_paths:
+  - collections/ansible_collections/
+  - build/
+  - .venv/
+  - .ansible/
+  - .secrets/
+  - .github/
+  - bitbucket-pipelines.yml
+# Inventories are additionally validated by scripts/validate.sh (preflight + rendering).
+kinds:
+  - playbook: "playbooks/*.yml"
+  - vars: "shared/**/*.yml"

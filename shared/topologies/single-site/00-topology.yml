@@ -1,0 +1,9 @@
+---
+# =============================================================================
+# LAYER 2b - TOPOLOGY: single-site   (dev100, dev, test, qa, dr)
+# One data center, three dedicated KRaft controllers with an independent quorum.
+# Preflight enforces: no site_* groups, odd number of controllers.
+# =============================================================================
+iac_topology: single-site
+# Upstream defaults apply (internal topic replication factor 3, no rack awareness).
+# Never lower replication here: the prod-tier dr environment uses this topology as well.

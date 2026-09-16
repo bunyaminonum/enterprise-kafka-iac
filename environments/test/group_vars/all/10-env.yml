@@ -1,8 +1,32 @@
 ---
-environment_name: "test"
-cp_domain: test.internal.net
-cp_realm: TEST.INTERNAL.NET
-cp_ldap_base: "dc=test,dc=internal,dc=net"
-cp_cluster_name: cp-test
-cp_repo_dir: /opt/confluent-platform
-cp_infra_host: test-controller-01.internal.net
+# =============================================================================
+# LAYER 3 - ENVIRONMENT IDENTITY: test
+# Values that identify the environment and its endpoints. TODO: replace example values.
+# =============================================================================
+iac_env: test
+
+# Cluster names (RBAC cluster registry, Control Center)
+kafka_broker_cluster_name: cp-test
+schema_registry_cluster_name: cp-test-schema-registry
+kafka_connect_cluster_name: cp-test-connect
+kafka_connect_group_id: cp-test-connect
+
+# Directory services (Active Directory, LDAPS)
+iac_ldap_url: ldaps://ad.test.internal.net:636
+iac_ldap_bind_dn: "CN=ldap-bind-user,OU=ServiceAccounts,DC=test,DC=internal,DC=net"
+iac_ldap_user_search_base: "OU=Users,DC=test,DC=internal,DC=net"
+iac_ldap_group_search_base: "OU=Groups,DC=test,DC=internal,DC=net"
+kerberos:                         # merged key by key with the baseline hardening
+  realm: TEST.INTERNAL.NET
+  kdc_hostname: ad.test.internal.net
+  admin_hostname: ad.test.internal.net
+
+# Identity provider (OAuth). Client secrets live in 90-vault.yml.
+iac_oauth_base_url: https://sso.test.internal.net/oauth2
+iac_oauth_expected_audience: kafka-test
+iac_oauth_client_ids:
+  superuser: kafka-test-superuser
+  schema_registry: kafka-test-schema-registry
+  kafka_connect: kafka-test-connect
+  kafka_rest: kafka-test-rest-proxy
+  control_center: kafka-test-control-center

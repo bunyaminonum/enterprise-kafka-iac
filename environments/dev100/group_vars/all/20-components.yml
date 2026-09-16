@@ -1,0 +1,17 @@
+---
+# =============================================================================
+# LAYER 3 - ENVIRONMENT OVERRIDES: dev100
+# Only what makes THIS environment different from shared/base + tier (nonprod) + topology (single-site).
+# (Replaces 95-overrides.yml of the previous layout: every shared layer is loaded before this file.)
+# =============================================================================
+kafka_broker_custom_properties:
+  log.retention.hours: 12
+
+# The lab directory is OpenLDAP? Override the Active Directory mapping of the baseline:
+# kafka_broker_custom_properties:
+#   ldap.search.mode: GROUPS
+#   ldap.user.name.attribute: uid
+#   ldap.user.object.class: inetOrgPerson
+#   ldap.group.object.class: groupOfNames
+#   ldap.group.member.attribute: member
+#   ldap.group.member.attribute.pattern: "uid=(.*),ou=users,dc=lab,dc=local"

@@ -1,0 +1,9 @@
+---
+# Restart of the components, one host at a time by default (upstream restart_strategy: rolling).
+#   scripts/run.sh <environment> restart [--tags kafka_broker] [--limit site_flr]
+#   -e restart_strategy=parallel restarts all hosts of a component at once (maintenance windows only).
+- name: Preflight
+  ansible.builtin.import_playbook: preflight.yml
+
+- name: Confluent Platform restart
+  ansible.builtin.import_playbook: confluent.platform.restart

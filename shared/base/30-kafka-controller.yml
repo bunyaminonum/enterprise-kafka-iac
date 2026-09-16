@@ -1,0 +1,18 @@
+---
+# LAYER 1 - KRaft controllers (dedicated hosts; preflight rejects controller/broker co-location,
+# because cp-ansible uses the same node_id host variable for both roles)
+iac_kafka_controller_heap: "-Xms2g -Xmx2g"
+
+kafka_controller_custom_properties:
+  log.dirs: /var/lib/controller/data
+
+# merge semantics: only KAFKA_HEAP_OPTS is replaced; upstream keys (KAFKA_OPTS, LOG_DIR, ...) are kept.
+kafka_controller_service_environment_overrides:
+  KAFKA_HEAP_OPTS: "{{ iac_kafka_controller_heap }} {{ iac_jvm_g1_opts }}"
+
+# node_id is pinned per host in hosts.yml. The upstream default of kafka_controller_quorum_voters is
+# computed from the host ORDER (index + 9991), not from node_id, so it is derived from node_id here.
+# Result: "<node_id>@<host>:<port>,..." in hosts.yml order.
+kafka_controller_quorum_voters: >-
+  {{ groups['kafka_controller'] | map('extract', hostvars, 'node_id') | zip(groups['kafka_controller'])
+     | map('join', '@') | product([':' ~ kafka_controller_port | default(9093)]) | map('join') | join(',') }}

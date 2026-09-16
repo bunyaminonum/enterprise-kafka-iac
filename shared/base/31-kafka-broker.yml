@@ -1,0 +1,30 @@
+---
+# LAYER 1 - Brokers
+# Frequently tuned knobs are exposed as iac_* parameters; lower layers only override the parameter.
+iac_kafka_broker_heap: "-Xms6g -Xmx6g"
+
+# merge semantics: only KAFKA_HEAP_OPTS is replaced. The upstream KAFKA_OPTS (JMX exporter agent,
+# Kerberos JAAS), KAFKA_LOG4J_OPTS and LOG_DIR keys survive. With hash_behaviour=replace they would be lost.
+kafka_broker_service_environment_overrides:
+  KAFKA_HEAP_OPTS: "{{ iac_kafka_broker_heap }} {{ iac_jvm_g1_opts }}"
+
+# The same dictionary is also populated by 10-security.yml (ldap.*). Files of one layer directory are
+# merged in lexical order, so all keys end up in the final server.properties.
+kafka_broker_custom_properties:
+  log.dirs: /var/lib/kafka/data
+  auto.create.topics.enable: false
+  # Replication is never lowered below these values in any environment (a restart must not be an outage).
+  default.replication.factor: 3
+  min.insync.replicas: 2
+  unclean.leader.election.enable: false
+  num.partitions: 6
+  confluent.balancer.enable: true
+  # Confluent Server license. Registered as a required secret for the prod tier; empty elsewhere (trial mode).
+  confluent.license: "{{ vault_confluent_license | default('') }}"
+
+# Kernel tuning applied by cp-ansible (pinned explicitly).
+kafka_broker_sysctl:
+  vm.swappiness: 1
+  vm.dirty_background_ratio: 5
+  vm.dirty_ratio: 80
+  vm.max_map_count: 262144

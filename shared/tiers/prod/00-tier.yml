@@ -1,0 +1,37 @@
+---
+# =============================================================================
+# LAYER 2a - TIER: prod           (preprod, production, dr)
+# preprod belongs to this tier on purpose: it must behave like production.
+# =============================================================================
+iac_tier: prod
+iac_kafka_controller_heap: "-Xms4g -Xmx4g"
+# Kafka serves data from the OS page cache; Confluent's production guidance is a 6 GB broker heap with the
+# G1 options of iac_jvm_g1_opts. Grow it only with evidence from a sizing or load test (OD-08).
+iac_kafka_broker_heap: "-Xms6g -Xmx6g"
+iac_schema_registry_heap: "-Xms4g -Xmx4g"
+iac_kafka_connect_heap: "-Xms8g -Xmx8g"
+iac_kafka_rest_heap: "-Xms4g -Xmx4g"
+iac_control_center_heap: "-Xmx6g"
+
+# Production-like clusters must run with a license (dictionary merge adds it to the registry).
+iac_required_secrets:
+  vault_confluent_license: true
+
+kafka_broker_custom_properties:
+  log.retention.hours: 168
+  # Tiered storage is not decided yet (OD-11). Once decided, enable it here for the whole tier:
+  # confluent.tier.feature: true
+  # confluent.tier.enable: true
+  # confluent.tier.backend: S3
+  #
+  # Network and request tuning of the previous layout. Enable only after a load test (OD-08);
+  # message.max.bytes must be aligned with producer max.request.size and consumer fetch sizes.
+  # num.network.threads: 12
+  # socket.send.buffer.bytes: 102400
+  # socket.receive.buffer.bytes: 102400
+  # socket.request.max.bytes: 104857600
+  # message.max.bytes: 33554816
+  # queued.max.requests: 1001
+  # connections.max.idle.ms: 14400000
+  # max.connections.per.ip: 1500
+  # max.connections: 40000

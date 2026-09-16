@@ -1,20 +1,25 @@
-# Ansible runtime & temporary files
-*.retry
-*.pyc
-__pycache__/
-.ansible/
-.vault_pass*
+# Installed by scripts/bootstrap.sh (no trailing slash: symlinked copies are ignored as well)
+/collections/ansible_collections
+/.venv
 
-# Upstream collection binaries (installed dynamically via requirements.yml)
-collections/ansible_collections/
+# Created by ansible-lint
+/.ansible
 
-# Ephemeral keys, certificates, and secrets
+# Generated output (rendered configuration, logs, config diffs, support bundles)
+/build
+generated_ssl_files/
+
+# Secrets that must never be committed
+/.secrets
+.vault-pass*
+*.decrypted
+*.keytab
 *.key
 *.pem
 *.jks
-!pki/ca/ca.crt
+*.p12
 
-# Environment-specific secrets & runtime logs
-*.env
+*.retry
 *.log
 *.swp
+__pycache__/

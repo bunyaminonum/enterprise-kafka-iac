@@ -1,0 +1,123 @@
+# Bitbucket Pipelines (Bitbucket Cloud) - same flow as .github/workflows/. All logic lives in scripts/,
+# so the CI definitions stay thin and identical in behaviour.
+#
+# Runners: self-hosted Linux Shell runners inside the corporate network (Nexus access), label "kafka-iac".
+# Repository settings > Deployments: create one deployment environment per inventory directory
+#   (dev100, dev, test, qa, preprod, production, dr - the names must match exactly) with
+#   secured deployment variables: ANSIBLE_VAULT_PASSWORD, ANSIBLE_SSH_PRIVATE_KEY (optional),
+#   deployment variable SSH_KNOWN_HOSTS (known_hosts entries of the managed hosts).
+#   preprod, production, dr: allow main only and restrict who may deploy (deployment permissions).
+# Operations are started manually: Pipelines > Run pipeline > branch main > custom: <environment>.
+# Protected environments additionally require CONFIRM_ENV (checked by playbooks/preflight.yml).
+
+---
+definitions:
+  steps:
+    - step: &validate
+        name: Validate all environments
+        runs-on:
+          - self.hosted
+          - linux.shell
+          - kafka-iac
+        clone:
+          depth: full
+        max-time: 45
+        script:
+          - scripts/bootstrap.sh --dev
+          - scripts/validate.sh
+        artifacts:
+          - build/**
+
+    - step: &operate
+        name: Run playbook
+        runs-on:
+          - self.hosted
+          - linux.shell
+          - kafka-iac
+        max-time: 360
+        script:
+          # The deployment environment name selects the inventory directory.
+          - export TARGET_ENV="$BITBUCKET_DEPLOYMENT_ENVIRONMENT"
+          - export IAC_SUPPORT_BUNDLE_DIR="$BITBUCKET_CLONE_DIR/build/support-bundles"
+          - export IAC_SECRETS_DIR="$BITBUCKET_CLONE_DIR/.secrets/$TARGET_ENV"
+          - scripts/bootstrap.sh
+          - scripts/validate.sh --env "$TARGET_ENV" --no-lint
+          # TODO(OD-04): fetch the keytabs (kafka-<inventory_hostname>.keytab) and security.properties into $IAC_SECRETS_DIR.
+          - install -d -m 700 "$IAC_SECRETS_DIR"
+          - scripts/run.sh "$TARGET_ENV" "$PLAYBOOK"
+        after-script:
+          - rm -rf "$BITBUCKET_CLONE_DIR/.secrets"
+        artifacts:
+          - build/support-bundles/**
+
+pipelines:
+  pull-requests:
+    "**":
+      - step:
+          <<: *validate
+          name: Validate all environments + effective configuration diff
+          script:
+            - scripts/bootstrap.sh --dev
+            - scripts/validate.sh
+            - git fetch origin "+refs/heads/$BITBUCKET_PR_DESTINATION_BRANCH:refs/remotes/origin/$BITBUCKET_PR_DESTINATION_BRANCH"
+            - scripts/config-diff.sh --reuse-head --out build/config-diff.patch "origin/$BITBUCKET_PR_DESTINATION_BRANCH"
+
+  branches:
+    main:
+      - step: *validate
+
+  custom:
+    dev100:
+      # Inputs shown by "Run pipeline"; the anchor is reused by every environment below.
+      - variables: &operation-variables
+          - name: PLAYBOOK
+            default: site
+            allowed-values:
+              - site
+              - health_check
+              - restart
+              - validate_hosts
+              - support_bundle
+          - name: CONFIRM_ENV
+          - name: PLAYBOOK_TAGS
+          - name: PLAYBOOK_LIMIT
+      - step:
+          <<: *operate
+          name: Run playbook on dev100
+          deployment: dev100
+    dev:
+      - variables: *operation-variables
+      - step:
+          <<: *operate
+          name: Run playbook on dev
+          deployment: dev
+    test:
+      - variables: *operation-variables
+      - step:
+          <<: *operate
+          name: Run playbook on test
+          deployment: test
+    qa:
+      - variables: *operation-variables
+      - step:
+          <<: *operate
+          name: Run playbook on qa
+          deployment: qa
+    preprod:
+      - variables: *operation-variables
+      - step:
+          <<: *operate
+          name: Run playbook on preprod
+          deployment: preprod
+    production:
+      - variables: *operation-variables
+      - step:
+          <<: *operate
+          name: Run playbook on production
+          deployment: production
+    dr:
+      - variables: *operation-variables
+      - step:
+          <<: *operate
+          name: Run playbook on dr
+          deployment: dr

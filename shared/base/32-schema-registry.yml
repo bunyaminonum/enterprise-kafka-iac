@@ -1,0 +1,9 @@
+---
+# LAYER 1 - Schema Registry
+iac_schema_registry_heap: "-Xms1g -Xmx1g"
+
+schema_registry_service_environment_overrides:
+  SCHEMA_REGISTRY_HEAP_OPTS: "{{ iac_schema_registry_heap }} {{ iac_jvm_g1_opts }}"
+
+schema_registry_custom_properties:
+  schema.compatibility.level: backward      # TODO(OD-10): schema governance decision

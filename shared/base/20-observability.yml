@@ -1,0 +1,22 @@
+---
+# LAYER 1 - ORGANISATION BASELINE: OBSERVABILITY
+# Prometheus JMX exporter agent on every component (collection default version 1.0.1).
+jmxexporter_enabled: true
+jmxexporter_version: "1.0.1"
+jmxexporter_jar_url: "{{ iac_nexus_url }}/maven-proxy/io/prometheus/jmx/jmx_prometheus_javaagent/{{ jmxexporter_version }}/jmx_prometheus_javaagent-{{ jmxexporter_version }}.jar"
+
+# Scrape ports, pinned explicitly (these are the upstream defaults) so that firewall rules and the
+# Prometheus configuration have one reference that does not move with collection upgrades.
+kafka_controller_jmxexporter_port: 8079
+kafka_broker_jmxexporter_port: 8080
+schema_registry_jmxexporter_port: 8078
+kafka_connect_jmxexporter_port: 8077
+kafka_rest_jmxexporter_port: 8075
+
+# Jolokia: the collection still defaults to 1.6.2 (2019). Disabled until there is a consumer for it.
+jolokia_enabled: false
+
+# log4j2 configuration managed by cp-ansible; logs belong on a dedicated disk.
+custom_log4j2: true
+kafka_broker_log_dir: /var/log/kafka
+kafka_controller_log_dir: /var/log/controller

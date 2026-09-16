@@ -1,0 +1,10 @@
+---
+# Read-only health checks of all components.
+#   scripts/run.sh <environment> health_check
+- name: Preflight (read-only run, no confirmation required)
+  ansible.builtin.import_playbook: preflight.yml
+  vars:
+    iac_require_confirmation: false
+
+- name: Confluent Platform health checks
+  ansible.builtin.import_playbook: confluent.platform.health_check

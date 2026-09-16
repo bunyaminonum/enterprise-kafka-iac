@@ -1,8 +1,32 @@
 ---
-environment_name: "qa"
-cp_domain: qa.internal.net
-cp_realm: QA.INTERNAL.NET
-cp_ldap_base: "dc=qa,dc=internal,dc=net"
-cp_cluster_name: cp-qa
-cp_repo_dir: /opt/confluent-platform
-cp_infra_host: qa-controller-01.internal.net
+# =============================================================================
+# LAYER 3 - ENVIRONMENT IDENTITY: qa
+# Values that identify the environment and its endpoints. TODO: replace example values.
+# =============================================================================
+iac_env: qa
+
+# Cluster names (RBAC cluster registry, Control Center)
+kafka_broker_cluster_name: cp-qa
+schema_registry_cluster_name: cp-qa-schema-registry
+kafka_connect_cluster_name: cp-qa-connect
+kafka_connect_group_id: cp-qa-connect
+
+# Directory services (Active Directory, LDAPS)
+iac_ldap_url: ldaps://ad.qa.internal.net:636
+iac_ldap_bind_dn: "CN=ldap-bind-user,OU=ServiceAccounts,DC=qa,DC=internal,DC=net"
+iac_ldap_user_search_base: "OU=Users,DC=qa,DC=internal,DC=net"
+iac_ldap_group_search_base: "OU=Groups,DC=qa,DC=internal,DC=net"
+kerberos:                         # merged key by key with the baseline hardening
+  realm: QA.INTERNAL.NET
+  kdc_hostname: ad.qa.internal.net
+  admin_hostname: ad.qa.internal.net
+
+# Identity provider (OAuth). Client secrets live in 90-vault.yml.
+iac_oauth_base_url: https://sso.qa.internal.net/oauth2
+iac_oauth_expected_audience: kafka-qa
+iac_oauth_client_ids:
+  superuser: kafka-qa-superuser
+  schema_registry: kafka-qa-schema-registry
+  kafka_connect: kafka-qa-connect
+  kafka_rest: kafka-qa-rest-proxy
+  control_center: kafka-qa-control-center

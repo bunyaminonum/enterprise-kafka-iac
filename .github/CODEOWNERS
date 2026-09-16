@@ -1,0 +1,13 @@
+# Required reviewers per path. Enable "Require review from Code Owners" in the branch protection of main.
+# The last matching pattern wins. Team names are placeholders.
+*                                @your-org/kafka-platform
+/shared/                         @your-org/kafka-platform-architects
+/collections/requirements.yml    @your-org/kafka-platform-architects
+/requirements.txt                @your-org/kafka-platform-architects
+/ansible.cfg                     @your-org/kafka-platform-architects
+/playbooks/                      @your-org/kafka-platform-architects
+/environments/preprod/            @your-org/kafka-platform-leads
+/environments/production/         @your-org/kafka-platform-leads @your-org/change-managers
+/environments/dr/                 @your-org/kafka-platform-leads @your-org/change-managers
+/.github/                        @your-org/kafka-platform-architects
+/bitbucket-pipelines.yml         @your-org/kafka-platform-architects

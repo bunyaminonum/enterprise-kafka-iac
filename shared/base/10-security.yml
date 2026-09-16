@@ -1,51 +1,159 @@
 ---
-# Transport Layer Security (TLS)
+# =============================================================================
+# LAYER 1 - ORGANISATION BASELINE: SECURITY
+#
+# Target model:
+#   client / application traffic    -> SASL/OAUTHBEARER (corporate identity provider)
+#   inter-broker and KRaft traffic  -> SASL/GSSAPI (Kerberos, Active Directory KDC)
+#   authorization                   -> Confluent RBAC (MDS) backed by Active Directory (LDAPS)
+#   passwords in generated files    -> Confluent Secret Protection (per-environment master key)
+#
+# The cp-ansible 8.3.1 default listeners already implement this model, no custom listeners are needed:
+#   INTERNAL   :9092 -> OAUTHBEARER when auth_mode is ldap / oauth / ldap_with_oauth  (applications, CP components)
+#   BROKER     :9091 -> sasl_protocol                                                (broker to broker)
+#   CONTROLLER :9093 -> kafka_controller_sasl_protocol (defaults to sasl_protocol)
+#
+# Open decisions: OD-01 account naming, OD-02 auth mode, OD-03 MDS topology,
+#                 OD-04 certificate/keytab source, OD-05 MDS super user identity
+# =============================================================================
+
+# ---- Secrets registry --------------------------------------------------------
+# vault_* variables every environment must provide in group_vars/all/90-vault.yml.
+# A DICTIONARY on purpose: tiers and environments add entries (lists would be replaced, not merged).
+# Used by preflight (deploy mode: present and not a placeholder) and by static validation
+# (CI replaces every registered secret with a placeholder, so no vault password is needed).
+iac_required_secrets:
+  vault_ldap_bind_password: true
+  vault_mds_super_user_password: true
+  vault_kafka_broker_ldap_password: true
+  vault_schema_registry_ldap_password: true
+  vault_kafka_connect_ldap_password: true
+  vault_kafka_rest_ldap_password: true
+  vault_control_center_next_gen_ldap_password: true
+  vault_oauth_superuser_client_secret: true
+  vault_schema_registry_oauth_client_secret: true
+  vault_kafka_connect_oauth_client_secret: true
+  vault_kafka_rest_oauth_client_secret: true
+  vault_control_center_oauth_client_secret: true
+  vault_secrets_protection_masterkey: true
+
+# ---- Secret files on the control node ------------------------------------------
+# cp-ansible reads these files on the CONTROL NODE and copies them to the hosts:
+#   kafka-<inventory_hostname>.keytab   Kerberos keytab of every controller and broker
+#   security.properties                 Secret Protection security file of the environment
+# The pipeline materialises them from the secret store into IAC_SECRETS_DIR before the run
+# (default: .secrets/<environment>, git-ignored). Preflight checks that they exist.
+iac_secrets_dir: "{{ lookup('ansible.builtin.env', 'IAC_SECRETS_DIR', default=inventory_dir ~ '/../../.secrets/' ~ iac_env) }}"
+
+# ---- Secret Protection ---------------------------------------------------------
+# Encrypts every password-like value cp-ansible writes (JAAS configs, basic auth user info, LDAP
+# credentials) instead of leaving it in plain text in the properties files. The master key and the
+# security file are created ONCE per environment (README, "Secrets"); regenerate_masterkey stays false,
+# otherwise cp-ansible creates a new master key on every run.
+secrets_protection_enabled: true
+regenerate_masterkey: false
+secrets_protection_masterkey: "{{ vault_secrets_protection_masterkey }}"
+secrets_protection_security_file: "{{ iac_secrets_dir }}/security.properties"
+
+# ---- TLS -------------------------------------------------------------------
+# Host certificates are issued by the corporate CA and placed on the hosts BEFORE the run
+# (ssl_custom_certs_remote_src: true means the paths below are paths on the target hosts).
 ssl_enabled: true
-ssl_mutual_auth_enabled: false
 ssl_custom_certs: true
-ssl_ca_cert_filepath: "{{ cp_repo_dir }}/pki/ca/ca.crt"
-ssl_signed_cert_filepath: "{{ cp_repo_dir }}/pki/certs/{{ inventory_hostname }}-signed.crt"
-ssl_key_filepath: "{{ cp_repo_dir }}/pki/certs/{{ inventory_hostname }}-key.pem"
+ssl_custom_certs_remote_src: true
+ssl_ca_cert_filepath: /var/ssl/private/ca-bundle.crt
+ssl_signed_cert_filepath: "/var/ssl/private/{{ inventory_hostname }}.crt"
+ssl_key_filepath: "/var/ssl/private/{{ inventory_hostname }}.key"
+# ssl_key_password: "{{ vault_ssl_key_password }}"     # only if the private keys are encrypted
 
-# Server-to-Server Authentication (Kerberos / GSSAPI)
+# ---- Kerberos (inter-broker and KRaft) ------------------------------------------
 sasl_protocol: kerberos
-kafka_controller_sasl_protocol: kerberos
-
+kerberos_configure: true
 kerberos:
-  realm: "{{ cp_realm }}"
-  kdc_hostname: "{{ cp_infra_host }}"
-  admin_hostname: "{{ cp_infra_host }}"
+  realm: INTERNAL.NET                    # set per environment (10-env.yml) together with the KDC hosts
   dns_lookup_realm: false
   dns_lookup_kdc: false
   ticket_lifetime: 24h
   forwardable: true
-  udp_preference_limit: 1
-  default_tkt_enctypes: "aes256-cts-hmac-sha384-192 aes128-cts-hmac-sha256-128"
-  default_tgs_enctypes: "aes256-cts-hmac-sha384-192 aes128-cts-hmac-sha256-128"
-  permitted_enctypes: "aes256-cts-hmac-sha384-192 aes128-cts-hmac-sha256-128"
+  udp_preference_limit: 1                # TCP only: tickets with large PACs do not fit into UDP datagrams
+  # Active Directory issues AES-SHA1 tickets (RFC 3962). Put the RFC 8009 types
+  # (aes256-cts-hmac-sha384-192 aes128-cts-hmac-sha256-128) first only if the KDC supports them.
+  default_tkt_enctypes: "aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96"
+  default_tgs_enctypes: "aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96"
+  permitted_enctypes: "aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96"
   canonicalize: false
   allow_weak_crypto: false
+# *_kerberos_keytab_path is a path on the ANSIBLE CONTROL NODE: the cp-ansible kerberos role copies the
+# keytab from there to *_keytab_path on the host (copy without remote_src).
+kafka_controller_kerberos_keytab_path: "{{ iac_secrets_dir }}/kafka-{{ inventory_hostname }}.keytab"
+kafka_controller_kerberos_principal: "kafka/{{ inventory_hostname }}@{{ kerberos.realm }}"
+kafka_broker_kerberos_keytab_path: "{{ iac_secrets_dir }}/kafka-{{ inventory_hostname }}.keytab"
+kafka_broker_kerberos_principal: "kafka/{{ inventory_hostname }}@{{ kerberos.realm }}"
 
-kafka_broker_kerberos_principal: "kafka/{{ inventory_hostname }}.{{ cp_domain }}@{{ cp_realm }}"
-kafka_broker_kerberos_keytab_path: "{{ cp_repo_dir }}/pki/keytabs/{{ inventory_hostname }}-kafka_broker.keytab"
-kafka_controller_kerberos_principal: "kafka/{{ inventory_hostname }}.{{ cp_domain }}@{{ cp_realm }}"
-kafka_controller_kerberos_keytab_path: "{{ cp_repo_dir }}/pki/keytabs/{{ inventory_hostname }}-kafka_controller.keytab"
+# ---- Authorization: RBAC + OAuth ---------------------------------------------------
+rbac_enabled: true
+# ldap_with_oauth: MDS authenticates users against Active Directory AND accepts tokens of the corporate
+# identity provider; CP components act as OAuth clients on the INTERNAL listener.
+auth_mode: ldap_with_oauth                     # TODO(OD-02): confirm (LDAP + OAuth) vs OAuth only
+oauth_issuer_url: "{{ iac_oauth_base_url }}"   # iac_oauth_* values are set per environment (10-env.yml)
+oauth_token_uri: "{{ iac_oauth_base_url }}/token"
+oauth_jwks_uri: "{{ iac_oauth_base_url }}/keys"   # TODO: real IdP endpoints
+oauth_expected_audience: "{{ iac_oauth_expected_audience }}"
+# Kafka 4.x clients only fetch tokens/JWKS from URLs allowed by -Dorg.apache.kafka.sasl.oauthbearer.allowed.urls.
+# cp-ansible writes "*" (allow any URL) unless this is true; true restricts it to oauth_token_uri and oauth_jwks_uri.
+whitelist_explicit_oauth_urls: true
+oauth_sub_claim: sub                           # TODO: claim that carries the client principal
+oauth_groups_claim: groups
+# Path on the ANSIBLE CONTROL NODE (copied to hosts and imported into truststores).
+oauth_idp_cert_path: "{{ iac_control_node_ca_cert }}"
+iac_control_node_ca_cert: /etc/pki/ca-trust/source/anchors/corporate-root-ca.crt   # TODO: real file on the runner
 
-# Listener Layout: INTERNAL (OAuth Client) vs BROKER (Kerberos Inter-Broker)
-kafka_broker_custom_listeners:
-  internal:
-    name: INTERNAL
-    port: 9092
-    ssl_enabled: true
-    ssl_mutual_auth_enabled: false
-    ssl_client_authentication: none
-    principal_mapping_rules: ["DEFAULT"]
-    sasl_protocol: OAUTH
-  broker:
-    name: BROKER
-    port: 9091
-    ssl_enabled: true
-    ssl_mutual_auth_enabled: false
-    ssl_client_authentication: none
-    principal_mapping_rules: ["DEFAULT"]
-    sasl_protocol: kerberos
+# One IdP client per component. Client IDs are plain per-environment values, secrets live in vault.
+oauth_superuser_client_id: "{{ iac_oauth_client_ids.superuser }}"
+oauth_superuser_client_password: "{{ vault_oauth_superuser_client_secret }}"
+schema_registry_oauth_user: "{{ iac_oauth_client_ids.schema_registry }}"
+schema_registry_oauth_password: "{{ vault_schema_registry_oauth_client_secret }}"
+kafka_connect_oauth_user: "{{ iac_oauth_client_ids.kafka_connect }}"
+kafka_connect_oauth_password: "{{ vault_kafka_connect_oauth_client_secret }}"
+kafka_rest_oauth_user: "{{ iac_oauth_client_ids.kafka_rest }}"
+kafka_rest_oauth_password: "{{ vault_kafka_rest_oauth_client_secret }}"
+control_center_next_gen_oauth_user: "{{ iac_oauth_client_ids.control_center }}"
+control_center_next_gen_oauth_password: "{{ vault_control_center_oauth_client_secret }}"
+
+# ---- LDAP identities -------------------------------------------------------------
+# TODO(OD-01): align with the directory naming convention.
+# The MDS super user is an administrative identity, separate from the read-only LDAP bind account (OD-05).
+mds_super_user: svc-kafka-mds
+mds_super_user_password: "{{ vault_mds_super_user_password }}"   # collection default is the literal "password"
+kafka_broker_ldap_user: svc-kafka-broker
+kafka_broker_ldap_password: "{{ vault_kafka_broker_ldap_password }}"
+schema_registry_ldap_user: svc-kafka-schemaregistry
+schema_registry_ldap_password: "{{ vault_schema_registry_ldap_password }}"
+kafka_connect_ldap_user: svc-kafka-connect
+kafka_connect_ldap_password: "{{ vault_kafka_connect_ldap_password }}"
+kafka_rest_ldap_user: svc-kafka-proxy
+kafka_rest_ldap_password: "{{ vault_kafka_rest_ldap_password }}"
+control_center_next_gen_ldap_user: svc-kafka-controlcenter
+control_center_next_gen_ldap_password: "{{ vault_control_center_next_gen_ldap_password }}"
+
+# Additional RBAC system admins (e.g. the platform operations team).
+rbac_component_additional_system_admins: []    # TODO: operations principals
+
+# MDS -> Active Directory over LDAPS. Group membership is read from the user's memberOf attribute.
+# A dictionary: environments override single keys only (see environments/dev100 for an OpenLDAP variant).
+kafka_broker_custom_properties:
+  ldap.java.naming.provider.url: "{{ iac_ldap_url }}"
+  ldap.java.naming.factory.initial: com.sun.jndi.ldap.LdapCtxFactory
+  ldap.com.sun.jndi.ldap.read.timeout: 3000
+  ldap.java.naming.security.authentication: simple
+  ldap.java.naming.security.principal: "{{ iac_ldap_bind_dn }}"
+  ldap.java.naming.security.credentials: "{{ vault_ldap_bind_password }}"
+  ldap.search.mode: USERS
+  ldap.user.search.base: "{{ iac_ldap_user_search_base }}"
+  ldap.user.name.attribute: sAMAccountName
+  ldap.user.object.class: user
+  ldap.user.memberof.attribute: memberOf
+  ldap.user.memberof.attribute.pattern: "CN=([^,]+),.*"
+  ldap.group.search.base: "{{ iac_ldap_group_search_base }}"
+  ldap.group.object.class: group
+  ldap.group.name.attribute: cn

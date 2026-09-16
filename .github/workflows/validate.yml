@@ -1,0 +1,65 @@
+# Validation of every pull request and of the main branch.
+# Needs no vault password and no access to the managed hosts. Runs on a self-hosted runner inside the
+# corporate network because pip packages and collections come from Nexus (air-gapped).
+---
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: validate all environments
+    runs-on: [self-hosted, linux, kafka-iac]
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the configuration diff renders the target branch as well
+
+      - name: Bootstrap control node
+        run: scripts/bootstrap.sh --dev
+
+      - name: Lint, variable names, syntax, preflight (static) and rendering
+        run: scripts/validate.sh
+
+      - name: Effective configuration diff against the target branch
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: scripts/config-diff.sh --reuse-head --out build/config-diff.patch "$BASE_SHA"
+
+      - name: Publish the diff in the job summary
+        if: github.event_name == 'pull_request'
+        run: |
+          {
+            echo "## Effective configuration changes"
+            if [ -s build/config-diff.patch ]; then
+              echo "Files changed: $(grep -c '^+++ ' build/config-diff.patch). Full patch: artifact **rendered-configuration**."
+              echo '```diff'
+              head -c 60000 build/config-diff.patch
+              echo '```'
+            else
+              echo "No change in the rendered configuration of any environment."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload rendered configuration
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-configuration
+          path: build/
+          if-no-files-found: ignore
+          retention-days: 14

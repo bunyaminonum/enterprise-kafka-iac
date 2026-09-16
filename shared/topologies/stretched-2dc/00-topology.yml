@@ -1,0 +1,29 @@
+---
+# =============================================================================
+# LAYER 2b - TOPOLOGY: stretched-2dc  (preprod, production)
+# One logical cluster stretched over two data centers (dc1 primary, dc2 secondary),
+# KRaft quorum 2 + 1. Sharing this layer guarantees that preprod keeps the production topology.
+# Preflight enforces: every host belongs to exactly one site_* group, both sites host controllers,
+# every broker has broker.rack equal to its site (group_vars/site_<code>.yml).
+# =============================================================================
+iac_topology: stretched-2dc
+iac_sites: [dc1, dc2]
+
+# cp-ansible guidance: "When splitting your cluster across 2 DCs with 4 or more Brokers, this should be
+# increased to 4 to balance topic replicas." (roles/variables/defaults/main.yml). This one variable sets
+# offsets, transaction, metadata, license, balancer, ... topics consistently.
+# It cannot live in the prod tier because dr is prod tier but single-site with 3 brokers.
+default_internal_replication_factor: 4
+
+kafka_broker_custom_properties:
+  # 2 replicas per data center: losing one site still leaves 2 in-sync replicas (min.insync.replicas=2).
+  default.replication.factor: 4
+  # Consumers fetch from the closest replica when they set client.rack (KIP-392).
+  replica.selector.class: org.apache.kafka.common.replica.RackAwareReplicaSelector
+  # TODO(OD-06): decide observer placement (Multi-Region Clusters, confluent.placement.constraints)
+  # and revisit min.insync.replicas together with it.
+
+kafka_connect_custom_properties:
+  config.storage.replication.factor: 4
+  offset.storage.replication.factor: 4
+  status.storage.replication.factor: 4

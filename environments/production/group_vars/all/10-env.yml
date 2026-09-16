@@ -1,8 +1,32 @@
 ---
-environment_name: "production"
-cp_domain: prod.internal.net
-cp_realm: PROD.INTERNAL.NET
-cp_ldap_base: "dc=prod,dc=internal,dc=net"
-cp_cluster_name: cp-production
-cp_repo_dir: /opt/confluent-platform
-cp_infra_host: prod-dc1-ctrl-01.internal.net
+# =============================================================================
+# LAYER 3 - ENVIRONMENT IDENTITY: production
+# Values that identify the environment and its endpoints. TODO: replace example values.
+# =============================================================================
+iac_env: production
+
+# Cluster names (RBAC cluster registry, Control Center)
+kafka_broker_cluster_name: cp-production
+schema_registry_cluster_name: cp-production-schema-registry
+kafka_connect_cluster_name: cp-production-connect
+kafka_connect_group_id: cp-production-connect
+
+# Directory services (Active Directory, LDAPS)
+iac_ldap_url: ldaps://ad.prod.internal.net:636
+iac_ldap_bind_dn: "CN=ldap-bind-user,OU=ServiceAccounts,DC=prod,DC=internal,DC=net"
+iac_ldap_user_search_base: "OU=Users,DC=prod,DC=internal,DC=net"
+iac_ldap_group_search_base: "OU=Groups,DC=prod,DC=internal,DC=net"
+kerberos:                         # merged key by key with the baseline hardening
+  realm: PROD.INTERNAL.NET
+  kdc_hostname: ad.prod.internal.net
+  admin_hostname: ad.prod.internal.net
+
+# Identity provider (OAuth). Client secrets live in 90-vault.yml.
+iac_oauth_base_url: https://sso.prod.internal.net/oauth2
+iac_oauth_expected_audience: kafka-production
+iac_oauth_client_ids:
+  superuser: kafka-production-superuser
+  schema_registry: kafka-production-schema-registry
+  kafka_connect: kafka-production-connect
+  kafka_rest: kafka-production-rest-proxy
+  control_center: kafka-production-control-center

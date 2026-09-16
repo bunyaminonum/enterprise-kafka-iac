@@ -1,0 +1,10 @@
+---
+# Host readiness checks of the upstream collection (OS version, resources, ...), e.g. before the first install.
+#   scripts/run.sh <environment> validate_hosts
+- name: Preflight (read-only run, no confirmation required)
+  ansible.builtin.import_playbook: preflight.yml
+  vars:
+    iac_require_confirmation: false
+
+- name: Confluent Platform host validation
+  ansible.builtin.import_playbook: confluent.platform.validate_hosts

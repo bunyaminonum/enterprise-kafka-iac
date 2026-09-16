@@ -1,0 +1,8 @@
+---
+# =============================================================================
+# LAYER 3 - ENVIRONMENT OVERRIDES: dev
+# Only what makes THIS environment different from shared/base + tier (nonprod) + topology (single-site).
+# (Replaces 95-overrides.yml of the previous layout: every shared layer is loaded before this file.)
+# =============================================================================
+kafka_broker_custom_properties:
+  log.retention.hours: 24

@@ -1,0 +1,17 @@
+---
+# =============================================================================
+# LAYER 3 - ENVIRONMENT OVERRIDES: dr
+# Only what makes THIS environment different from shared/base + tier (prod) + topology (single-site).
+# (Replaces 95-overrides.yml of the previous layout: every shared layer is loaded before this file.)
+# =============================================================================
+iac_kafka_connect_heap: "-Xms4g -Xmx4g"
+
+# Cluster Linking: the cluster that owns a link stores the link configuration (including credentials
+# for the source cluster) encrypted with password.encoder.secret. dr is the destination of the links.
+# TODO(OD-12): if source-initiated links are used, production needs the same setting.
+kafka_broker_custom_properties:
+  password.encoder.secret: "{{ vault_password_encoder_secret }}"
+
+# Registered in addition to the baseline and tier secrets (dictionaries merge across layers).
+iac_required_secrets:
+  vault_password_encoder_secret: true

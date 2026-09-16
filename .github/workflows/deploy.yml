@@ -1,0 +1,99 @@
+# Manual operations (deploy, restart, health check, ...) on ONE environment.
+#
+# Repository configuration (Settings > Environments), one GitHub environment per inventory directory:
+#   dev100, dev, test, qa, preprod, production, dr
+#     secrets:   ANSIBLE_VAULT_PASSWORD   vault password of that environment (vault identity = environment name)
+#                ANSIBLE_SSH_PRIVATE_KEY  optional; otherwise the SSH identity of the runner is used
+#     variables: SSH_KNOWN_HOSTS          known_hosts entries of the managed hosts (host keys are verified)
+#   preprod, production, dr: "Required reviewers" and "Deployment branches: main only"
+# Protected environments additionally require the confirmation input (checked by playbooks/preflight.yml).
+---
+name: deploy
+run-name: "${{ inputs.playbook }} on ${{ inputs.environment }} (@${{ github.actor }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        required: true
+        options: [dev100, dev, test, qa, preprod, production, dr]
+      playbook:
+        description: Operation
+        type: choice
+        required: true
+        default: site
+        options: [site, health_check, restart, validate_hosts, support_bundle]
+      confirm_environment:
+        description: Type the environment name again (required for preprod, production and dr)
+        type: string
+        required: false
+      tags:
+        description: Optional --tags (e.g. kafka_broker)
+        type: string
+        required: false
+      limit:
+        description: Optional --limit (e.g. site_ysl or a host name)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+# Never run two operations against the same environment at the same time.
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  operate:
+    name: ${{ inputs.playbook }} / ${{ inputs.environment }}
+    runs-on: [self-hosted, linux, kafka-iac]
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 360
+    env:
+      TARGET_ENV: ${{ inputs.environment }}
+      PLAYBOOK: ${{ inputs.playbook }}
+      IAC_SUPPORT_BUNDLE_DIR: ${{ github.workspace }}/build/support-bundles
+      IAC_SECRETS_DIR: ${{ runner.temp }}/iac-secrets/${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bootstrap control node
+        run: scripts/bootstrap.sh
+
+      - name: Static validation of the target environment
+        run: scripts/validate.sh --env "$TARGET_ENV" --no-lint
+
+      - name: Materialise control node secret files
+        # TODO(OD-04): fetch from the secret store into $IAC_SECRETS_DIR:
+        #   kafka-<inventory_hostname>.keytab for every controller and broker of $TARGET_ENV
+        #   security.properties (Secret Protection security file of $TARGET_ENV)
+        # Preflight stops the run if a file is missing.
+        run: |
+          install -d -m 700 "$IAC_SECRETS_DIR"
+
+      - name: Run playbook
+        env:
+          CONFIRM_ENV: ${{ inputs.confirm_environment }}
+          PLAYBOOK_TAGS: ${{ inputs.tags }}
+          PLAYBOOK_LIMIT: ${{ inputs.limit }}
+          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+          ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
+        run: scripts/run.sh "$TARGET_ENV" "$PLAYBOOK"
+
+      - name: Remove secret files
+        if: always()
+        run: rm -rf "${{ runner.temp }}/iac-secrets"
+
+      - name: Upload support bundle
+        if: failure() || inputs.playbook == 'support_bundle'
+        uses: actions/upload-artifact@v4
+        with:
+          name: support-bundle-${{ inputs.environment }}-${{ github.run_id }}
+          path: build/support-bundles/
+          if-no-files-found: ignore
+          retention-days: 14

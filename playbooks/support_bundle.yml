@@ -1,0 +1,8 @@
+---
+# Diagnostic bundle (configuration, logs, system information) of an environment.
+# This file is REQUIRED next to the other wrappers: the confluent.platform.support_bundle_on_failure
+# callback runs "support_bundle.yml" from the directory of the playbook that failed.
+# No preflight on purpose: it must work on a broken environment.
+#   scripts/run.sh <environment> support_bundle
+- name: Confluent support bundle
+  ansible.builtin.import_playbook: confluent.platform.support_bundle

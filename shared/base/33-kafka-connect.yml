@@ -1,0 +1,11 @@
+---
+# LAYER 1 - Kafka Connect
+iac_kafka_connect_heap: "-Xms1g -Xmx2g"
+
+kafka_connect_service_environment_overrides:
+  KAFKA_HEAP_OPTS: "{{ iac_kafka_connect_heap }}"
+
+kafka_connect_custom_properties:
+  config.storage.replication.factor: 3
+  offset.storage.replication.factor: 3
+  status.storage.replication.factor: 3

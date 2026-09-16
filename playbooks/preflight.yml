@@ -1,0 +1,205 @@
+---
+# =============================================================================
+# Preflight: guard rails that run before any cp-ansible play. Nothing here connects to managed hosts.
+#
+# Modes
+#   deploy (default)                  all checks, including secrets, keytabs and the confirmation
+#                                     of protected environments (-e confirm_env=<environment>)
+#   -e iac_static_validation=true     pull requests / CI: no vault password needed, secrets are
+#                                     replaced by placeholders, no confirmation required
+# Wrappers may pass iac_require_confirmation=false for read-only operations (health checks).
+# =============================================================================
+- name: Preflight | guard rails
+  hosts: all
+  gather_facts: false
+  become: false
+  any_errors_fatal: true
+  tags: [always]
+  tasks:
+    - name: Replace registered secrets with placeholders (static validation)
+      ansible.builtin.import_tasks: tasks/static_placeholders.yml
+      when: iac_static_validation | default(false) | bool
+
+    # --------------------------------------------------- identity, versions, secrets
+    - name: Checks that do not need cp-ansible variables (once, on the control node)
+      delegate_to: localhost
+      run_once: true
+      block:
+        - name: Hash merging is enabled (cp-ansible requirement, basis of the layering model)
+          ansible.builtin.assert:
+            that: lookup('ansible.builtin.config', 'DEFAULT_HASH_BEHAVIOUR') == 'merge'
+            fail_msg: "hash_behaviour must be 'merge'. Run from the repository root (ansible.cfg) and do not set ANSIBLE_HASH_BEHAVIOUR."
+            quiet: true
+
+        - name: Installed confluent.platform collection matches iac_cp_ansible_version
+          ansible.builtin.assert:
+            that:
+              - iac_manifest | length > 0
+              - iac_installed_version == iac_cp_ansible_version
+            fail_msg: >-
+              Pinned version {{ iac_cp_ansible_version }} but installed
+              {{ iac_installed_version | default('nothing', true) }} ({{ iac_manifest | default('no MANIFEST.json', true) }}).
+              Run scripts/bootstrap.sh and keep collections/requirements.yml in sync.
+            quiet: true
+          vars:
+            iac_manifest: >-
+              {{ lookup('ansible.builtin.first_found',
+                        lookup('ansible.builtin.config', 'COLLECTIONS_PATHS')
+                        | map('regex_replace', '/+$', '')
+                        | product(['/ansible_collections/confluent/platform/MANIFEST.json']) | map('join') | list,
+                        skip=true) }}
+            iac_installed_version: >-
+              {{ (lookup('ansible.builtin.file', iac_manifest) | from_json).collection_info.version
+                 if iac_manifest | length > 0 else '' }}
+
+        - name: Protected environments require an explicit confirmation
+          ansible.builtin.assert:
+            that: (confirm_env | default('')) == iac_env
+            fail_msg: "'{{ iac_env }}' is a protected environment. Re-run with -e confirm_env={{ iac_env }} (CI: confirmation input)."
+            quiet: true
+          when:
+            - iac_env in iac_protected_envs
+            - iac_require_confirmation | default(true) | bool
+            - not (iac_static_validation | default(false) | bool)
+
+        - name: Every inventory host belongs to the environment group
+          ansible.builtin.assert:
+            that:
+              - ('env_' ~ iac_env) in groups
+              - groups['all'] | difference(groups['env_' ~ iac_env]) | length == 0
+            fail_msg: "All hosts of environments/{{ iac_env }} must be children of the group env_{{ iac_env }}."
+            quiet: true
+
+        - name: Registered secrets are set (deploy mode)
+          ansible.builtin.assert:
+            that:
+              - lookup('ansible.builtin.vars', item, default='') | string | length > 0
+              - lookup('ansible.builtin.vars', item, default='') | string != 'CHANGE_ME'
+            fail_msg: "{{ item }} is missing or CHANGE_ME in environments/{{ iac_env }}/group_vars/all/90-vault.yml"
+            quiet: true
+          loop: "{{ iac_required_secrets | dict2items | selectattr('value') | map(attribute='key') | list }}"
+          when: not (iac_static_validation | default(false) | bool)
+
+        - name: Secret Protection keeps its master key and has its security file (deploy mode)
+          ansible.builtin.assert:
+            that:
+              - not (regenerate_masterkey | bool)
+              - secrets_protection_security_file is file
+            fail_msg: >-
+              regenerate_masterkey must stay false and {{ secrets_protection_security_file }} must exist on the
+              control node. Materialise the security.properties of '{{ iac_env }}' into IAC_SECRETS_DIR.
+            quiet: true
+          when:
+            - secrets_protection_enabled | bool
+            - not (iac_static_validation | default(false) | bool)
+
+        - name: MDS super user password is not the collection default
+          ansible.builtin.assert:
+            that: mds_super_user_password | string != 'password'
+            quiet: true
+          when: not (iac_static_validation | default(false) | bool)
+
+    - name: Load cp-ansible variables (defaults and derived values used by the checks below)
+      ansible.builtin.import_role:
+        name: confluent.platform.variables
+
+    # -------------------------------------------------------------- per-host checks
+    - name: Host belongs to this environment and all layers are loaded
+      ansible.builtin.assert:
+        that:
+          - iac_env is defined
+          - inventory_dir | basename == iac_env
+          - ('env_' ~ iac_env) in group_names
+          - iac_tier is defined
+          - iac_topology is defined
+        fail_msg: >-
+          Inventory/identity mismatch or a missing layer symlink (00-base, 05-tier, 06-topology).
+          On Windows checkouts enable git symlinks (core.symlinks=true).
+        quiet: true
+
+    - name: KRaft nodes pin node_id
+      ansible.builtin.assert:
+        that: node_id is defined and (node_id | string) is match('^[0-9]+$')
+        fail_msg: "{{ inventory_hostname }} must define an integer node_id in hosts.yml"
+        quiet: true
+      when: inventory_hostname in groups['kafka_controller'] + groups['kafka_broker']
+
+    - name: Site membership matches the topology
+      ansible.builtin.assert:
+        that: >-
+          (group_names | select('match', '^site_') | list | length)
+          == (1 if iac_topology == 'stretched-2dc' else 0)
+        fail_msg: >-
+          {{ inventory_hostname }}: stretched-2dc requires exactly one site_* group per host,
+          single-site forbids site_* groups (found {{ group_names | select('match', '^site_') | list }})
+        quiet: true
+
+    - name: Stretched topology - broker.rack matches the site
+      ansible.builtin.assert:
+        that: >-
+          kafka_broker_custom_properties['broker.rack'] | default('')
+          == (group_names | select('match', '^site_') | first | regex_replace('^site_', ''))
+        fail_msg: "{{ inventory_hostname }}: broker.rack must equal its site code (group_vars/site_<code>.yml)"
+        quiet: true
+      when:
+        - iac_topology == 'stretched-2dc'
+        - inventory_hostname in groups['kafka_broker']
+
+    - name: Kerberos keytabs exist on the control node (deploy mode)
+      ansible.builtin.assert:
+        that: lookup('ansible.builtin.vars', iac_keytab_var) is file
+        fail_msg: >-
+          Missing keytab {{ lookup('ansible.builtin.vars', iac_keytab_var) }}.
+          Materialise the keytabs of '{{ iac_env }}' into IAC_SECRETS_DIR before the run.
+        quiet: true
+      vars:
+        iac_keytab_var: >-
+          {{ 'kafka_controller_kerberos_keytab_path' if inventory_hostname in groups['kafka_controller']
+             else 'kafka_broker_kerberos_keytab_path' }}
+      when:
+        - sasl_protocol == 'kerberos'
+        - inventory_hostname in groups['kafka_controller'] + groups['kafka_broker']
+        - not (iac_static_validation | default(false) | bool)
+
+    # ---------------------------------------------------------------- cluster layout
+    - name: Cluster layout checks (once, on the control node)
+      delegate_to: localhost
+      run_once: true
+      block:
+        - name: KRaft layout is valid
+          ansible.builtin.assert:
+            that:
+              - groups['kafka_controller'] | default([]) | length >= 3
+              - (groups['kafka_controller'] | length) is odd
+              - groups['kafka_controller'] | intersect(groups['kafka_broker'] | default([])) | length == 0
+              - iac_node_ids | length == iac_node_ids | unique | length
+            fail_msg: >-
+              Need an odd number (>= 3) of dedicated controllers, no broker/controller co-location and
+              node_id values unique across controllers and brokers. node_ids: {{ iac_node_ids }}
+            quiet: true
+          vars:
+            iac_node_ids: >-
+              {{ (groups['kafka_controller'] + groups['kafka_broker'])
+                 | map('extract', hostvars, 'node_id') | map('int') | list }}
+
+        - name: Enough brokers for the internal replication factor
+          ansible.builtin.assert:
+            that: groups['kafka_broker'] | length >= default_internal_replication_factor | int
+            fail_msg: "{{ groups['kafka_broker'] | length }} brokers < default_internal_replication_factor {{ default_internal_replication_factor }}"
+            quiet: true
+
+        - name: Stretched topology - controllers in every site
+          ansible.builtin.assert:
+            that: groups['kafka_controller'] | intersect(groups['site_' ~ item] | default([])) | length > 0
+            fail_msg: "site_{{ item }} has no KRaft controller"
+            quiet: true
+          loop: "{{ iac_sites | default([]) }}"
+          when: iac_topology == 'stretched-2dc'
+
+        - name: Protected environments keep secret masking enabled
+          ansible.builtin.assert:
+            that:
+              - mask_sensitive_logs | bool
+              - mask_sensitive_diff | bool
+            quiet: true
+          when: iac_env in iac_protected_envs

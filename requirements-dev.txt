@@ -1,0 +1,5 @@
+# Linters used by scripts/validate.sh (installed by `scripts/bootstrap.sh --dev`, e.g. in CI).
+# Versions validated together with ansible-core 2.18.
+-r requirements.txt
+yamllint==1.38.0
+ansible-lint==26.8.0

@@ -1,0 +1,13 @@
+---
+# =============================================================================
+# LAYER 3 - ENVIRONMENT OVERRIDES: qa
+# Only what makes THIS environment different from shared/base + tier (nonprod) + topology (single-site).
+# (Replaces 95-overrides.yml of the previous layout: every shared layer is loaded before this file.)
+# =============================================================================
+# Examples:
+#   iac_kafka_broker_heap: "-Xms8g -Xmx8g"
+#   kafka_broker_custom_properties:
+#     num.network.threads: 8
+#   schema_registry_custom_properties:
+#     schema.compatibility.level: full
+{}

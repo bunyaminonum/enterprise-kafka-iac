@@ -1,0 +1,5 @@
+---
+# LAYER 4 - SITE: dc1 - primary data center (production)
+# Only settings that are purely local to the hosts of this site belong here.
+kafka_broker_custom_properties:
+  broker.rack: dc1

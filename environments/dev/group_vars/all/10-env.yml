@@ -1,8 +1,32 @@
 ---
-environment_name: "dev"
-cp_domain: dev.internal.net
-cp_realm: DEV.INTERNAL.NET
-cp_ldap_base: "dc=dev,dc=internal,dc=net"
-cp_cluster_name: cp-dev
-cp_repo_dir: /opt/confluent-platform
-cp_infra_host: dev-controller-01.internal.net
+# =============================================================================
+# LAYER 3 - ENVIRONMENT IDENTITY: dev
+# Values that identify the environment and its endpoints. TODO: replace example values.
+# =============================================================================
+iac_env: dev
+
+# Cluster names (RBAC cluster registry, Control Center)
+kafka_broker_cluster_name: cp-dev
+schema_registry_cluster_name: cp-dev-schema-registry
+kafka_connect_cluster_name: cp-dev-connect
+kafka_connect_group_id: cp-dev-connect
+
+# Directory services (Active Directory, LDAPS)
+iac_ldap_url: ldaps://ad.dev.internal.net:636
+iac_ldap_bind_dn: "CN=ldap-bind-user,OU=ServiceAccounts,DC=dev,DC=internal,DC=net"
+iac_ldap_user_search_base: "OU=Users,DC=dev,DC=internal,DC=net"
+iac_ldap_group_search_base: "OU=Groups,DC=dev,DC=internal,DC=net"
+kerberos:                         # merged key by key with the baseline hardening
+  realm: DEV.INTERNAL.NET
+  kdc_hostname: ad.dev.internal.net
+  admin_hostname: ad.dev.internal.net
+
+# Identity provider (OAuth). Client secrets live in 90-vault.yml.
+iac_oauth_base_url: https://sso.dev.internal.net/oauth2
+iac_oauth_expected_audience: kafka-dev
+iac_oauth_client_ids:
+  superuser: kafka-dev-superuser
+  schema_registry: kafka-dev-schema-registry
+  kafka_connect: kafka-dev-connect
+  kafka_rest: kafka-dev-rest-proxy
+  control_center: kafka-dev-control-center

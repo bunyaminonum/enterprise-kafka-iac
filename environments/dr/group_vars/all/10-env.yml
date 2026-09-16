@@ -1,8 +1,32 @@
 ---
-environment_name: "dr"
-cp_domain: dr.internal.net
-cp_realm: DR.INTERNAL.NET
-cp_ldap_base: "dc=dr,dc=internal,dc=net"
-cp_cluster_name: cp-dr
-cp_repo_dir: /opt/confluent-platform
-cp_infra_host: dr-ctrl-01.internal.net
+# =============================================================================
+# LAYER 3 - ENVIRONMENT IDENTITY: dr
+# Values that identify the environment and its endpoints. TODO: replace example values.
+# =============================================================================
+iac_env: dr
+
+# Cluster names (RBAC cluster registry, Control Center)
+kafka_broker_cluster_name: cp-dr
+schema_registry_cluster_name: cp-dr-schema-registry
+kafka_connect_cluster_name: cp-dr-connect
+kafka_connect_group_id: cp-dr-connect
+
+# Directory services (Active Directory, LDAPS)
+iac_ldap_url: ldaps://ad.dr.internal.net:636
+iac_ldap_bind_dn: "CN=ldap-bind-user,OU=ServiceAccounts,DC=dr,DC=internal,DC=net"
+iac_ldap_user_search_base: "OU=Users,DC=dr,DC=internal,DC=net"
+iac_ldap_group_search_base: "OU=Groups,DC=dr,DC=internal,DC=net"
+kerberos:                         # merged key by key with the baseline hardening
+  realm: DR.INTERNAL.NET
+  kdc_hostname: ad.dr.internal.net
+  admin_hostname: ad.dr.internal.net
+
+# Identity provider (OAuth). Client secrets live in 90-vault.yml.
+iac_oauth_base_url: https://sso.dr.internal.net/oauth2
+iac_oauth_expected_audience: kafka-dr
+iac_oauth_client_ids:
+  superuser: kafka-dr-superuser
+  schema_registry: kafka-dr-schema-registry
+  kafka_connect: kafka-dr-connect
+  kafka_rest: kafka-dr-rest-proxy
+  control_center: kafka-dr-control-center

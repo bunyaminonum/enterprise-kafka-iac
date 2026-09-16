@@ -1,0 +1,110 @@
+---
+# =============================================================================
+# Render the effective configuration of ONE environment without touching any host.
+#
+# Output (default build/rendered/<environment>/<host>/):
+#   <component>.properties    final properties exactly as cp-ansible templates them
+#   <component>.env           systemd [Service] Environment overrides (heap, KAFKA_OPTS, ...)
+# Values whose key looks like a secret are masked. With -e iac_static_validation=true (CI) secrets are
+# placeholders anyway and no vault password is needed.
+#
+#   scripts/render-config.sh <environment>|all [output-dir]
+# =============================================================================
+- name: Render effective configuration
+  hosts: all
+  gather_facts: false
+  become: false
+  vars:
+    # Stand-ins for the few OS facts cp-ansible derives paths from (e.g. systemd_base_dir). No facts are gathered.
+    ansible_os_family: RedHat
+    ansible_distribution: RedHat
+    ansible_distribution_major_version: "9"
+    ansible_fqdn: "{{ inventory_hostname }}"
+    ansible_hostname: "{{ inventory_hostname.split('.')[0] }}"
+    iac_render_dir: "{{ playbook_dir }}/../build/rendered"
+    iac_render_components:
+      - kafka_controller
+      - kafka_broker
+      - schema_registry
+      - kafka_connect
+      - kafka_rest
+      - control_center_next_gen
+    # Keys whose value is masked in the output (matched at the END of the key).
+    iac_secret_key_pattern: '(?i)(password|secret|credentials|jaas\.config|api\.key|user\.info|master_key|license)$'
+  tasks:
+    - name: Replace registered secrets with placeholders (static validation)
+      ansible.builtin.import_tasks: tasks/static_placeholders.yml
+      when: iac_static_validation | default(false) | bool
+
+    - name: Load cp-ansible variables
+      ansible.builtin.import_role:
+        name: confluent.platform.variables
+
+    # The imports below only expose each component role's DEFAULTS (e.g. *_service_environment_overrides)
+    # to this play, merged below the inventory as in a real run. Their tasks are NEVER executed:
+    # the "never" tag removes them from the run before execution (fast), "when: false" and the
+    # read-only health_check task files are additional safety nets.
+    - name: Expose kafka_controller role defaults (tasks skipped)
+      ansible.builtin.import_role:
+        name: confluent.platform.kafka_controller
+        tasks_from: health_check.yml
+      when: false
+      tags: [never]
+    - name: Expose kafka_broker role defaults (tasks skipped)
+      ansible.builtin.import_role:
+        name: confluent.platform.kafka_broker
+        tasks_from: health_check.yml
+      when: false
+      tags: [never]
+    - name: Expose schema_registry role defaults (tasks skipped)
+      ansible.builtin.import_role:
+        name: confluent.platform.schema_registry
+        tasks_from: health_check.yml
+      when: false
+      tags: [never]
+    - name: Expose kafka_connect role defaults (tasks skipped)
+      ansible.builtin.import_role:
+        name: confluent.platform.kafka_connect
+        tasks_from: health_check.yml
+      when: false
+      tags: [never]
+    - name: Expose kafka_rest role defaults (tasks skipped)
+      ansible.builtin.import_role:
+        name: confluent.platform.kafka_rest
+        tasks_from: health_check.yml
+      when: false
+      tags: [never]
+    - name: Expose control_center_next_gen role defaults (tasks skipped)
+      ansible.builtin.import_role:
+        name: confluent.platform.control_center_next_gen
+        tasks_from: health_check.yml
+      when: false
+      tags: [never]
+
+    - name: Render final properties and service environment in memory (per host, no module run)
+      ansible.builtin.set_fact:
+        iac_rendered_json: >-
+          {{ {'env': iac_env,
+              'host': inventory_hostname,
+              'properties': dict(iac_host_components | zip(query('ansible.builtin.vars', *iac_properties_vars))),
+              'environment': dict(iac_host_components | zip(query('ansible.builtin.vars', *iac_environment_vars)))}
+             | to_json }}
+      vars:
+        iac_host_components: "{{ iac_render_components | select('in', group_names) | list }}"
+        iac_properties_vars: "{{ iac_host_components | product(['_final_properties']) | map('join') | list }}"
+        iac_environment_vars: "{{ iac_host_components | product(['_service_environment_overrides']) | map('join') | list }}"
+
+    - name: Write build/rendered/<environment>/<host>/<component>.{properties,env}
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "{{ playbook_dir }}/files/write_rendered.py"
+          - "{{ iac_render_dir }}/{{ iac_env }}"
+          - "{{ iac_secret_key_pattern }}"
+        stdin: |
+          {% for host in ansible_play_hosts_all %}
+          {{ hostvars[host]['iac_rendered_json'] }}
+          {% endfor %}
+      delegate_to: localhost
+      run_once: true
+      changed_when: true

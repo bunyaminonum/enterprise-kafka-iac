@@ -1,0 +1,8 @@
+---
+# LAYER 1 - Control Center Next Gen
+iac_control_center_heap: "-Xmx6g"
+
+control_center_next_gen_service_environment_overrides:
+  CONTROL_CENTER_HEAP_OPTS: "{{ iac_control_center_heap }}"
+
+control_center_next_gen_custom_properties: {}

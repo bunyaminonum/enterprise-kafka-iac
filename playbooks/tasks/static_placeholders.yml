@@ -1,0 +1,10 @@
+---
+# Static validation (pull requests, CI): replace every registered secret with a placeholder.
+# set_fact has a higher precedence than inventory variables, so the encrypted values in 90-vault.yml
+# are never decrypted and no vault password is needed. Used by preflight.yml and render_config.yml.
+- name: Replace registered secrets with placeholders
+  ansible.builtin.set_fact:
+    "{{ item }}": "static-placeholder"   # noqa: var-naming[no-jinja]
+  loop: "{{ iac_required_secrets | dict2items | selectattr('value') | map(attribute='key') | list }}"
+  loop_control:
+    label: "{{ item }}"
