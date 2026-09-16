@@ -1,6 +1,0 @@
----
-# Environment: dev (Shared Development Cluster)
-environment_name: "dev"
-
-kafka_broker_custom_properties:
-  log.retention.hours: 24

@@ -1,9 +1,0 @@
----
-# Environment: production (Live Dual-DC Cluster)
-environment_name: "production"
-
-# Live cluster security and durability enforcement
-kafka_broker_custom_properties:
-  log.retention.hours: 168
-  unclean.leader.election.enable: "false"
-  min.insync.replicas: 2
