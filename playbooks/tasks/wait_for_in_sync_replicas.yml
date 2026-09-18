@@ -1,0 +1,34 @@
+---
+# Waits until no partition of the cluster is under-replicated (asked through the local broker).
+# The upstream broker health check skips this when RBAC is enabled and Secret Protection is not
+# (roles/kafka_broker/tasks/health_check.yml), so a rolling restart would move on to the next broker while
+# the replicas of the previous one still catch up; with min.insync.replicas=2, acks=all producers then fail.
+- name: Master key for the Kafka tools while Secret Protection is enabled
+  ansible.builtin.include_role:
+    name: confluent.platform.common
+    tasks_from: get_masterkey.yml
+  vars:
+    systemd_override_path: "{{ kafka_broker.systemd_override }}"
+  when: kafka_broker_client_secrets_protection_enabled | bool
+
+- name: Wait until no partition is under-replicated
+  ansible.builtin.command:
+    argv:
+      - "{{ binary_base_path }}/bin/kafka-topics"
+      - --bootstrap-server
+      - "{{ hostvars[inventory_hostname] | confluent.platform.resolve_hostname }}:{{ kafka_broker_listeners[kafka_broker_inter_broker_listener_name]['port'] }}"
+      - --command-config
+      - "{{ kafka_broker.client_config_file }}"
+      - --describe
+      - --under-replicated-partitions
+  environment:
+    CONFLUENT_SECURITY_MASTER_KEY: "{{ existing_masterkey | default('') }}"
+    KAFKA_OPTS: >-
+      -Xlog:all=error -XX:+IgnoreUnrecognizedVMOptions
+      {{ '-Djava.security.krb5.conf=' ~ kerberos_client_config_file_dest if kerberos_client_config_file_dest != '/etc/krb5.conf' else '' }}
+  register: iac_under_replicated
+  until: iac_under_replicated.rc == 0 and iac_under_replicated.stdout | trim | length == 0 and 'ERROR' not in iac_under_replicated.stderr
+  retries: "{{ iac_isr_wait_retries | default(60) }}"
+  delay: "{{ iac_isr_wait_delay | default(10) }}"
+  changed_when: false
+  check_mode: false

@@ -136,7 +136,8 @@ below 3 / `min.insync.replicas=2` in any environment; stretched clusters use 4 (
 │   ├── group_vars/site_<code>.yml   # stretched environments only (broker.rack)
 │   └── host_vars/                   # host specific values
 ├── playbooks/
-│   ├── site.yml                     # preflight + confluent.platform.all
+│   ├── site.yml                     # preflight + file_secrets + confluent.platform.all
+│   ├── file_secrets.yml             # FileConfigProvider secret files of the hosts
 │   ├── health_check.yml, restart.yml, validate_hosts.yml, support_bundle.yml
 │   ├── preflight.yml                # guard rails
 │   ├── render_config.yml            # effective configuration without touching hosts
@@ -202,20 +203,19 @@ scripts/validate.sh             # lint, variable names, syntax, preflight (stati
 - **Every secret is registered** in `iac_required_secrets` (`shared/base/10-security.yml`; the prod tier adds
   `vault_confluent_license`, `dr` adds `vault_password_encoder_secret`). Preflight refuses to deploy while a
   registered secret is missing or still `CHANGE_ME`.
-- **Secret Protection** encrypts the passwords that cp-ansible writes into the properties files. Create the
-  master key and the security file once per environment with the Confluent CLI:
-
-  ```bash
-  openssl rand -base64 24 > passphrase.txt
-  confluent secret master-key generate --local-secrets-file security.properties --passphrase @passphrase.txt
-  # store the printed master key as vault_secrets_protection_masterkey (encrypt_string, see above)
-  # store security.properties and the passphrase in the secret store of the environment
-  ```
-
+- **No password stays in a generated file.** `playbooks/file_secrets.yml`, imported by `site.yml`, moves every
+  password-like value cp-ansible would write into `server.properties` and its siblings into one file per
+  component on the host — owned by the service user, mode `0400` — and makes the roles template
+  `${file:/var/ssl/private/iac-secrets/<component>.properties:<key>}` references instead. Kafka's
+  FileConfigProvider resolves them at startup and may only read files below `iac_file_secrets_dir`
+  (`config.providers.file.param.allowed.paths`). The selected keys are the ones Confluent Secret Protection
+  encrypts, so the coverage is the same without a master key on the hosts (`docs/UPSTREAM-NOTES.md`). Nothing
+  has to be prepared per environment: the values come from vault during the normal run.
+- **Rotating a secret**: change the value in `90-vault.yml`, run `site` (rewrites the file, restarts nothing),
+  then `restart` for the affected component — a running service reads its secret file only at startup.
 - **Control node secret files.** cp-ansible reads these files on the control node and copies them to the
   hosts. Provide them in `$IAC_SECRETS_DIR` (default `.secrets/<environment>`, git-ignored):
-  `kafka-<inventory_hostname>.keytab` for every controller and broker, and `security.properties`.
-  Preflight checks that all of them exist.
+  `kafka-<inventory_hostname>.keytab` for every controller and broker. Preflight checks that they exist.
 - **Host TLS certificates are expected on the hosts** (`ssl_custom_certs_remote_src: true`, paths under
   `/var/ssl/private/`). The identity provider CA certificate (`iac_control_node_ca_cert`) is read from the
   control node.
@@ -227,6 +227,7 @@ All runs go through `scripts/run.sh <environment> <playbook> [ansible-playbook a
 ```bash
 scripts/run.sh dev100 site                                   # deploy or reconfigure an environment
 scripts/run.sh dev100 site --tags kafka_broker               # one component
+scripts/run.sh qa file_secrets                               # only the secret files of the hosts
 scripts/run.sh qa health_check                               # read-only checks
 scripts/run.sh dr support_bundle                             # diagnostics archive
 CONFIRM_ENV=production scripts/run.sh production restart --limit site_dc2   # protected environment, one site
@@ -244,6 +245,17 @@ callback, so a refused run never starts collecting diagnostics from the hosts.
 `deployment_strategy: rolling` provisions running hosts one at a time through the upstream playbooks.
 Upstream warns that rolling can fail while security modes are being changed; use
 `-e deployment_strategy=parallel` for such runs.
+
+On a running cluster, separate writing the configuration from restarting:
+
+```bash
+scripts/run.sh production site --skip-tags package -e skip_restarts=true   # write everywhere, restart nothing
+CONFIRM_ENV=production scripts/run.sh production restart                   # controlled rolling restart
+```
+
+`playbooks/restart.yml` waits after every broker until no partition is under-replicated. The upstream broker
+health check skips that check while RBAC is enabled and Secret Protection is not, so a plain `site` run would
+move on to the next broker while replicas are still catching up (`docs/UPSTREAM-NOTES.md`).
 
 ### Render the effective configuration
 
@@ -290,9 +302,8 @@ scripts/new-env.sh perf nonprod single-site perf.internal.net
   internal replication factor;
 - topology: stretched hosts belong to exactly one site, both sites host controllers, `broker.rack` matches
   the site; single-site environments have no site groups;
-- deploy mode: registered secrets are set, the MDS super user password is not the upstream default, keytabs
-  and the Secret Protection security file exist, the master key is never regenerated implicitly, secret
-  masking is on in protected environments.
+- deploy mode: registered secrets are set, the MDS super user password is not the upstream default, the
+  keytabs exist, secret masking is on in protected environments.
 
 `scripts/validate.sh` adds linting, the variable-name check, syntax checks and rendering for every environment.
 
@@ -312,7 +323,7 @@ Both expect **self-hosted Linux runners inside the corporate network** (Nexus an
 | Secrets | Environment secrets `ANSIBLE_VAULT_PASSWORD`, `ANSIBLE_SSH_PRIVATE_KEY`; variable `SSH_KNOWN_HOSTS` | Deployment variables with the same names |
 | Concurrency | one run per environment (`concurrency` group) | deployment concurrency control of deployment environments |
 
-Fetching keytabs and `security.properties` from the secret store is left as a marked step in both pipelines
+Fetching the keytabs from the secret store is left as a marked step in both pipelines
 (OD-04). `.github/CODEOWNERS` requires platform leads for `preprod`, `production`, `dr` and architects for
 `shared/`.
 

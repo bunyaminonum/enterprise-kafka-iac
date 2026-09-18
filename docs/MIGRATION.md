@@ -22,7 +22,7 @@ This document describes what changed compared with the first version of this rep
 | `playbooks/00_preflight.yml` | `playbooks/preflight.yml`, imported by every changing playbook | The deploy playbook did not run the guard rails. |
 | `playbooks/01_deploy_cluster.yml` | `playbooks/site.yml` (imports `confluent.platform.all`) | Direct role imports skipped the upstream serial/rolling logic. |
 | `playbooks/02_health_check.yml` | `playbooks/health_check.yml` (upstream health checks) | |
-| `playbooks/00_distribute_secrets.yml` | removed | Replaced by Secret Protection. |
+| `playbooks/00_distribute_secrets.yml` | `playbooks/file_secrets.yml` | Same idea, but the file is derived from the effective configuration: every password-like key of every component instead of a hand-written list. |
 | — | `playbooks/restart.yml`, `validate_hosts.yml`, `support_bundle.yml`, `render_config.yml` | Operations, diagnostics and configuration rendering. |
 | — | `scripts/`, `.github/`, `bitbucket-pipelines.yml`, `requirements*.txt`, `.yamllint`, `.ansible-lint`, `docs/` | Tooling, CI/CD, pinned toolchain, linting, documentation. |
 
@@ -39,8 +39,9 @@ This document describes what changed compared with the first version of this rep
    Controllers now run on dedicated hosts with unique ids (preflight enforces both).
 5. **Layer order**: see "Structure".
 6. **Plain-text secrets**: FileConfigProvider only covered the LDAP bind password; SR, Connect and REST JAAS
-   configurations and MDS credentials were still written in plain text. Secret Protection now encrypts all of
-   them; the vault file is no longer committed.
+   configurations and MDS credentials were still written in plain text. `playbooks/file_secrets.yml` now covers
+   every password-like key of every component, generated from the effective configuration; the vault file is no
+   longer committed.
 7. **Replication**: RF 1 in the single-site topology (inherited by `dr`), RF 3 with `min.insync.replicas=2` in
    the stretched topology, and internal topics with mixed RF (offsets 4, metadata/license/balancer 3).
    Now: RF 3 everywhere, RF 4 (2 per site) and `default_internal_replication_factor: 4` for stretched clusters.
@@ -74,8 +75,8 @@ This document describes what changed compared with the first version of this rep
    repository (README, "Publish the collections").
 3. Replace the placeholder host names, domains and endpoints (`hosts.yml`, `10-env.yml`, `shared/base`).
 4. Create one vault identity per environment and the per-value encrypted `90-vault.yml` files.
-5. Generate the Secret Protection master key and `security.properties` per environment, and provide the
-   keytabs; wire both into the pipelines (OD-04).
+5. Provide the keytabs per environment and wire them into the pipelines (OD-04). No master key is needed: the
+   secret files on the hosts are generated from vault on every run (`playbooks/file_secrets.yml`).
 6. Configure the CI system: self-hosted runners labelled `kafka-iac`, one environment per inventory directory,
    secrets, `SSH_KNOWN_HOSTS`, approvals for `preprod`, `production`, `dr`.
 7. If the lab directory is OpenLDAP, enable the override prepared in

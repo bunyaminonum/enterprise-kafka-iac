@@ -6,7 +6,7 @@
 #   client / application traffic    -> SASL/OAUTHBEARER (corporate identity provider)
 #   inter-broker and KRaft traffic  -> SASL/GSSAPI (Kerberos, Active Directory KDC)
 #   authorization                   -> Confluent RBAC (MDS) backed by Active Directory (LDAPS)
-#   passwords in generated files    -> Confluent Secret Protection (per-environment master key)
+#   passwords in generated files    -> FileConfigProvider, one file per component (playbooks/file_secrets.yml)
 #
 # The cp-ansible 8.3.1 default listeners already implement this model, no custom listeners are needed:
 #   INTERNAL   :9092 -> OAUTHBEARER when auth_mode is ldap / oauth / ldap_with_oauth  (applications, CP components)
@@ -35,25 +35,34 @@ iac_required_secrets:
   vault_kafka_connect_oauth_client_secret: true
   vault_kafka_rest_oauth_client_secret: true
   vault_control_center_oauth_client_secret: true
-  vault_secrets_protection_masterkey: true
 
 # ---- Secret files on the control node ------------------------------------------
 # cp-ansible reads these files on the CONTROL NODE and copies them to the hosts:
 #   kafka-<inventory_hostname>.keytab   Kerberos keytab of every controller and broker
-#   security.properties                 Secret Protection security file of the environment
 # The pipeline materialises them from the secret store into IAC_SECRETS_DIR before the run
 # (default: .secrets/<environment>, git-ignored). Preflight checks that they exist.
 iac_secrets_dir: "{{ lookup('ansible.builtin.env', 'IAC_SECRETS_DIR', default=inventory_dir ~ '/../../.secrets/' ~ iac_env) }}"
 
-# ---- Secret Protection ---------------------------------------------------------
-# Encrypts every password-like value cp-ansible writes (JAAS configs, basic auth user info, LDAP
-# credentials) instead of leaving it in plain text in the properties files. The master key and the
-# security file are created ONCE per environment (README, "Secrets"); regenerate_masterkey stays false,
-# otherwise cp-ansible creates a new master key on every run.
-secrets_protection_enabled: true
+# ---- Passwords in generated files: FileConfigProvider ------------------------------
+# cp-ansible writes every password-like value (keystore passwords, JAAS configs, basic auth user info, LDAP
+# credentials, license) into the properties files. playbooks/file_secrets.yml (imported by site.yml) moves
+# these values into one file per component on every host, readable by the service user only, and makes the
+# roles write ${file:<file>:<key>} references instead. The key patterns are the ones cp-ansible's Secret
+# Protection encrypts (roles/common/tasks/secrets_protection.yml), so both cover the same keys.
+# A changed secret is written by site but only read at startup: run the restart playbook afterwards.
+# Kafka's FileConfigProvider only reads files below allowed.paths (iac_file_secrets_dir).
+iac_file_secrets_enabled: true
+iac_file_secrets_dir: /var/ssl/private/iac-secrets
+iac_file_secrets_key_patterns:
+  - '.*password.*'
+  - '.*basic.auth.user.info.*'
+  - '^ldap.java.naming.security.credentials$'
+  - '^confluent.license$'
+  - '.*sasl.jaas.config'
+# Secret Protection stays off; regenerate_masterkey false keeps a re-enabled Secret Protection from
+# generating a new master key on every run.
+secrets_protection_enabled: false
 regenerate_masterkey: false
-secrets_protection_masterkey: "{{ vault_secrets_protection_masterkey }}"
-secrets_protection_security_file: "{{ iac_secrets_dir }}/security.properties"
 
 # ---- TLS -------------------------------------------------------------------
 # Host certificates are issued by the corporate CA and placed on the hosts BEFORE the run

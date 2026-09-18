@@ -81,6 +81,10 @@
       when: false
       tags: [never]
 
+    - name: FileConfigProvider references (as site.yml sets them)
+      ansible.builtin.import_tasks: tasks/file_secrets.yml
+      when: iac_file_secrets_enabled | bool
+
     - name: Render final properties and service environment in memory (per host, no module run)
       ansible.builtin.set_fact:
         iac_rendered_json: >-

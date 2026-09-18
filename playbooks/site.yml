@@ -6,5 +6,8 @@
 - name: Preflight
   ansible.builtin.import_playbook: preflight.yml
 
+- name: FileConfigProvider secret files and references
+  ansible.builtin.import_playbook: file_secrets.yml
+
 - name: Confluent Platform (pinned confluent.platform collection)
   ansible.builtin.import_playbook: confluent.platform.all

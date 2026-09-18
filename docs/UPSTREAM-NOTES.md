@@ -60,16 +60,39 @@ collection is upgraded.
 | `jolokia_version` | `1.6.2` | Jolokia disabled |
 | `jmxexporter_version` | `1.0.1` | kept (do not downgrade to 0.12.0) |
 
-## Secret Protection
+## Secret Protection is not used
 
-- `secrets_protection_enabled: true` encrypts password-like values (JAAS configs, basic auth user info, LDAP
-  credentials) in every generated properties file; Kafka's FileConfigProvider alone only covers the keys that
-  are rewritten by hand.
-- With `secrets_protection_masterkey` empty and `regenerate_masterkey: true` (both defaults) the collection
-  generates a new master key and security file on every run (`roles/common/tasks/masterkey.yml`). This
-  repository pins the master key in vault and sets `regenerate_masterkey: false`.
-- `secrets_protection_security_file` is a control node path. Secret Protection needs the Confluent CLI 3.0.0
-  or newer on the hosts (`roles/common/tasks/config_validations.yml`).
+- `secrets_protection_enabled` stays `false`. The password-like values are moved into per-component files and
+  resolved by Kafka's FileConfigProvider instead (`playbooks/file_secrets.yml`, `shared/base/10-security.yml`).
+- Reason: Secret Protection needs a master key on every host, and cp-ansible writes it as
+  `Environment="CONFLUENT_SECURITY_MASTER_KEY=..."` into the systemd override. systemd exposes unit
+  environments to unprivileged users (`systemctl show <unit> -p Environment`), so on the host the encryption
+  adds little over file permissions — while adding a key that has to be kept in vault and rotated.
+- The key selection is taken from `roles/common/tasks/secrets_protection.yml` (`.*password.*`,
+  `.*basic.auth.user.info.*`, `^ldap.java.naming.security.credentials$`, `^confluent.license$`,
+  `.*sasl.jaas.config`), so the coverage is identical. The KRaft controller `client.properties`, which Secret
+  Protection leaves in plain text, is covered as well.
+- Values are written with `java.util.Properties` escaping and read back by
+  `org.apache.kafka.common.config.provider.FileConfigProvider`. The REST Proxy needs its own provider for the
+  `client.*` keys (`client.config.providers`), exactly as the collection does for Secret Protection
+  ("Edge case for RP only" in `roles/variables/vars/main.yml`).
+- Going back to Secret Protection: `iac_file_secrets_enabled: false`, `secrets_protection_enabled: true` and
+  the `secrets_protection_masterkey` / `secrets_protection_security_file` pair (see the git history of
+  `shared/base/10-security.yml`). Preflight then requires the security file again and the hosts need the
+  Confluent CLI 3.0.0 or newer (`roles/common/tasks/config_validations.yml`).
+
+## Broker health check and rolling restarts
+
+- `roles/kafka_broker/tasks/health_check.yml` skips the under-replicated-partition check when `rbac_enabled`
+  is true and Secret Protection is off. A rolling `site` run and `confluent.platform.restart` then continue to
+  the next broker after a fixed delay (`kafka_broker_health_check_delay`, 20 s) without waiting for the
+  replicas of the restarted broker. With `min.insync.replicas=2` that can stop `acks=all` producers.
+- `playbooks/restart.yml` therefore waits for in-sync replicas itself
+  (`playbooks/tasks/wait_for_in_sync_replicas.yml`), and configuration changes on running clusters are applied
+  as `site -e skip_restarts=true` followed by `restart` (README, "Day-to-day operations").
+- `confluent.platform.restart` starts with an "Import all variables" play that gathers facts implicitly; the
+  component paths (`kafka_broker.config_file`, ...) are derived from `ansible_os_family`. `playbooks/restart.yml`
+  keeps that play for the same reason.
 
 ## Dependencies
 

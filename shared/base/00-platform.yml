@@ -31,7 +31,8 @@ iac_nexus_url: "https://nexus.internal.net/repository"
 confluent_common_repository_baseurl: "{{ iac_nexus_url }}/confluent-packages"
 confluent_clients_repository_baseurl: "{{ iac_nexus_url }}/confluent-packages"
 confluent_independent_repository_baseurl: "{{ iac_nexus_url }}/confluent-packages"
-# Collection default is a public AWS S3 bucket. The Confluent CLI is required by Secret Protection.
+# Collection default is a public AWS S3 bucket. cp-ansible installs the Confluent CLI on every host
+# (confluent_cli_download_enabled, upstream default); it is used for RBAC and secret operations.
 confluent_cli_repository_baseurl: "{{ iac_nexus_url }}/confluent-cli"
 
 # ---- Java --------------------------------------------------------------------

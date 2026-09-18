@@ -20,5 +20,4 @@ vault_schema_registry_oauth_client_secret: CHANGE_ME
 vault_kafka_connect_oauth_client_secret: CHANGE_ME
 vault_kafka_rest_oauth_client_secret: CHANGE_ME
 vault_control_center_oauth_client_secret: CHANGE_ME
-vault_secrets_protection_masterkey: CHANGE_ME
 vault_confluent_license: CHANGE_ME

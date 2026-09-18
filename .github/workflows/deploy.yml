@@ -70,7 +70,6 @@ jobs:
       - name: Materialise control node secret files
         # TODO(OD-04): fetch from the secret store into $IAC_SECRETS_DIR:
         #   kafka-<inventory_hostname>.keytab for every controller and broker of $TARGET_ENV
-        #   security.properties (Secret Protection security file of $TARGET_ENV)
         # Preflight stops the run if a file is missing.
         run: |
           install -d -m 700 "$IAC_SECRETS_DIR"

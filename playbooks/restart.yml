@@ -2,8 +2,123 @@
 # Restart of the components, one host at a time by default (upstream restart_strategy: rolling).
 #   scripts/run.sh <environment> restart [--tags kafka_broker] [--limit site_flr]
 #   -e restart_strategy=parallel restarts all hosts of a component at once (maintenance windows only).
+#
+# The plays of confluent.platform.restart for the components of this repository, in the same order, with one
+# addition: after every broker restart the play waits until no partition is under-replicated
+# (tasks/wait_for_in_sync_replicas.yml). Configuration changes on running production clusters:
+#   scripts/run.sh <environment> site --skip-tags package -e skip_restarts=true   # write, restart nothing
+#   scripts/run.sh <environment> restart                                         # controlled rolling restart
 - name: Preflight
   ansible.builtin.import_playbook: preflight.yml
 
-- name: Confluent Platform restart
-  ansible.builtin.import_playbook: confluent.platform.restart
+# As in confluent.platform.restart: gathers the OS facts cp-ansible derives the component paths from
+# (kafka_controller.client_config_file, ...) and sets the listener defaults for the plays below.
+- name: Import all variables
+  hosts: all
+  gather_facts: true
+  tags: always
+  tasks:
+    - name: Load cp-ansible variables
+      ansible.builtin.import_role:
+        name: confluent.platform.variables
+
+- name: Kafka Controller Restart
+  hosts: kafka_controller
+  gather_facts: false
+  serial: "{{ '100%' if restart_strategy | default('rolling') == 'parallel' else '1' }}"
+  tags: kafka_controller
+  tasks:
+    - name: Restart and wait
+      ansible.builtin.include_role:
+        name: confluent.platform.kafka_controller
+        tasks_from: restart_and_wait.yml
+    - name: Health check
+      ansible.builtin.include_role:
+        name: confluent.platform.kafka_controller
+        tasks_from: health_check.yml
+      tags: health_check
+
+- name: Kafka Broker Restart
+  hosts: kafka_broker
+  gather_facts: false
+  serial: "{{ '100%' if restart_strategy | default('rolling') == 'parallel' else '1' }}"
+  tags: kafka_broker
+  tasks:
+    - name: Load cp-ansible variables
+      ansible.builtin.import_role:
+        name: confluent.platform.variables
+    - name: Restart and wait
+      ansible.builtin.include_role:
+        name: confluent.platform.kafka_broker
+        tasks_from: restart_and_wait.yml
+    - name: Wait for in-sync replicas
+      ansible.builtin.import_tasks: tasks/wait_for_in_sync_replicas.yml
+    - name: Health check
+      ansible.builtin.include_role:
+        name: confluent.platform.kafka_broker
+        tasks_from: health_check.yml
+      tags: health_check
+
+- name: Schema Registry Restart
+  hosts: schema_registry
+  gather_facts: false
+  serial: "{{ '100%' if restart_strategy | default('rolling') == 'parallel' else '1' }}"
+  tags: schema_registry
+  tasks:
+    - name: Restart and wait
+      ansible.builtin.include_role:
+        name: confluent.platform.schema_registry
+        tasks_from: restart_and_wait.yml
+    - name: Health check
+      ansible.builtin.include_role:
+        name: confluent.platform.schema_registry
+        tasks_from: health_check.yml
+      tags: health_check
+
+- name: Kafka Connect Restart
+  hosts: kafka_connect
+  gather_facts: false
+  serial: "{{ '100%' if restart_strategy | default('rolling') == 'parallel' else '1' }}"
+  tags: kafka_connect
+  tasks:
+    - name: Restart and wait
+      ansible.builtin.include_role:
+        name: confluent.platform.kafka_connect
+        tasks_from: restart_and_wait.yml
+    - name: Health check
+      ansible.builtin.include_role:
+        name: confluent.platform.kafka_connect
+        tasks_from: health_check.yml
+      tags: health_check
+
+- name: Kafka Rest Restart
+  hosts: kafka_rest
+  gather_facts: false
+  serial: "{{ '100%' if restart_strategy | default('rolling') == 'parallel' else '1' }}"
+  tags: kafka_rest
+  tasks:
+    - name: Restart and wait
+      ansible.builtin.include_role:
+        name: confluent.platform.kafka_rest
+        tasks_from: restart_and_wait.yml
+    - name: Health check
+      ansible.builtin.include_role:
+        name: confluent.platform.kafka_rest
+        tasks_from: health_check.yml
+      tags: health_check
+
+- name: Control Center Next Gen Restart
+  hosts: control_center_next_gen
+  gather_facts: false
+  serial: "{{ '100%' if restart_strategy | default('rolling') == 'parallel' else '1' }}"
+  tags: control_center_next_gen
+  tasks:
+    - name: Restart and wait
+      ansible.builtin.include_role:
+        name: confluent.platform.control_center_next_gen
+        tasks_from: restart_and_wait.yml
+    - name: Health check
+      ansible.builtin.include_role:
+        name: confluent.platform.control_center_next_gen
+        tasks_from: health_check.yml
+      tags: health_check

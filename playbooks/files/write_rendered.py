@@ -35,7 +35,8 @@ def main():
                     value = values[key]
                     if kind == "env" and str(value) == "":
                         continue
-                    lines.append(f"{key}={'<masked>' if secret_pattern.search(key) else value}")
+                    masked = secret_pattern.search(key) and not str(value).startswith("${")
+                    lines.append(f"{key}={'<masked>' if masked else value}")
                 with open(os.path.join(host_dir, f"{component}.{kind}"), "w", encoding="utf-8") as handle:
                     handle.write("\n".join(lines) + "\n")
                 count += 1

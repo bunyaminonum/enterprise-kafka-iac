@@ -42,7 +42,7 @@ definitions:
           - export IAC_SECRETS_DIR="$BITBUCKET_CLONE_DIR/.secrets/$TARGET_ENV"
           - scripts/bootstrap.sh
           - scripts/validate.sh --env "$TARGET_ENV" --no-lint
-          # TODO(OD-04): fetch the keytabs (kafka-<inventory_hostname>.keytab) and security.properties into $IAC_SECRETS_DIR.
+          # TODO(OD-04): fetch the keytabs (kafka-<inventory_hostname>.keytab) into $IAC_SECRETS_DIR.
           - install -d -m 700 "$IAC_SECRETS_DIR"
           - scripts/run.sh "$TARGET_ENV" "$PLAYBOOK"
         after-script:
