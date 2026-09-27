@@ -17,7 +17,7 @@ iac_ldap_bind_dn: "CN=ldap-bind-user,OU=ServiceAccounts,DC=qa,DC=internal,DC=net
 iac_ldap_user_search_base: "OU=Users,DC=qa,DC=internal,DC=net"
 iac_ldap_group_search_base: "OU=Groups,DC=qa,DC=internal,DC=net"
 
-# Identity provider (OAuth). Client secrets live in 90-vault.yml.
+# Identity provider (OAuth). Client secrets come from IAC_SECRET_* variables (secrets.env.example).
 iac_oauth_base_url: https://sso.qa.internal.net/oauth2
 iac_oauth_expected_audience: kafka-qa
 iac_oauth_client_ids:

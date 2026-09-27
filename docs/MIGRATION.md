@@ -8,11 +8,11 @@ This document describes what changed compared with the first version of this rep
 | Previous layout | New layout | Why |
 |---|---|---|
 | 8 per-file symlinks in every `group_vars/all/` (`00-base.yml`, `10-security.yml`, ..., `35-performance.yml`) | 3 directory symlinks: `00-base`, `05-tier`, `06-topology` | The base feature files (10–35) were loaded AFTER the tier (05) and topology (06) layers, so a tier could not override a base value (a prod-tier `num.io.threads: 32` stayed `16`). A new base file also needed 7 new symlinks. |
-| `10-env.yml` (`environment_name`, `cp_*`) | `10-env.yml` (`iac_env`, directory, Kerberos and identity provider endpoints, cluster names) | `cp_*` names are used by the collection itself (`cp_cluster`, `cp_package`, ...). |
+| `10-env.yml` (`environment_name`, `cp_*`) | `10-env.yml` (`iac_env`, directory and identity provider endpoints, cluster names) | `cp_*` names are used by the collection itself (`cp_cluster`, `cp_package`, ...). |
 | `95-overrides.yml` | `20-components.yml` | Every shared layer is now loaded before the environment files, no "last word" file is needed. |
 | `90-vault.yml` committed in plain text (dev100 with real values) | `IAC_SECRET_*` environment variables (`shared/base/15-secrets.yml`, `secrets.env.example`); nothing in git (not part of the repository) | Reviewable pull requests, validation without vault passwords, no secrets in git. |
 | `shared/base/00-global.yml` | `shared/base/00-platform.yml` | Package installation from the internal mirror, pinned versions, shared JVM options. |
-| `shared/base/10-security.yml`, `20-identity-ldap.yml`, `25-file-config-provider.yml` | `shared/base/10-security.yml` | One security baseline: Kerberos (hardened, AD-compatible), LDAPS/Active Directory, OAuth, RBAC, Secret Protection. |
+| `shared/base/10-security.yml`, `20-identity-ldap.yml`, `25-file-config-provider.yml` | `shared/base/10-security.yml` | One security baseline: SCRAM-SHA-512/PLAIN between brokers and controllers, LDAPS/Active Directory, OAuth, RBAC, secrets through EnvVarConfigProvider. |
 | `shared/base/30-observability.yml` | `shared/base/20-observability.yml` | JMX exporter enabled, ports pinned. |
 | `shared/base/35-performance.yml` | `shared/base/31-kafka-broker.yml` + commented tuning block in `shared/tiers/prod/00-tier.yml` | Tuning without a load test is not a baseline (OD-08). |
 | — | `shared/base/30-kafka-controller.yml`, `32-schema-registry.yml`, `33-kafka-connect.yml`, `34-kafka-rest.yml`, `35-control-center.yml` | One file per component, heap parameters for every component. |
@@ -75,7 +75,7 @@ This document describes what changed compared with the first version of this rep
    repository (README, "Publish the collections").
 3. Replace the placeholder host names, domains and endpoints (`hosts.yml`, `10-env.yml`, `shared/base`).
 4. Provide the `IAC_SECRET_*` variables of every environment from the secret store (`secrets.env.example`).
-5. Provide the keytabs and the `IAC_SECRET_*` variables per environment and wire them into the pipelines or AWX
+5. Bootstrap the hosts (README, "Host bootstrap"), place the host certificates and provide the `IAC_SECRET_*` variables per environment and wire them into the pipelines or AWX
    (OD-04). No master key is needed: the secret files on the hosts are generated on every run
    (`playbooks/config_secrets.yml`).
 6. Configure the CI system: self-hosted runners labelled `kafka-iac`, one environment per inventory directory,

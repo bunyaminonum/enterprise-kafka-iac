@@ -164,7 +164,41 @@ below 3 / `min.insync.replicas=2` in any environment; stretched clusters use 4 (
   are checked out as plain files and preflight stops.
 - Access to Nexus: PyPI proxy, a raw repository with the collection tarballs, a mirror/proxy of
   `https://packages.confluent.io` and of the Confluent CLI (see `shared/base/00-platform.yml`).
-- SSH access and privilege escalation (`sudo`) on the managed hosts, their host keys in `known_hosts`.
+- SSH access to the managed hosts **as the deploy user** (`cp-kafka`, key-based), their host keys in
+  `known_hosts`. Ansible never uses `sudo` there (rootless deployment); an administrator bootstraps every host
+  once (below).
+
+### Host bootstrap (root, once per host)
+
+cp-ansible installs and runs Confluent Platform as one unprivileged deploy user (`rootless_enabled`,
+`shared/base/00-platform.yml`): the tarballs are unpacked below `rootless_deployment_path`, and every component
+is a `systemd --user` unit of that user (`cp-<component>.service`). Ansible cannot work with a sudoers file that
+allows single commands ("Privilege escalation must be general", Ansible documentation), so it gets no sudo at
+all. What needs root is done once per host by an administrator, with the values of `00-platform.yml`:
+
+```bash
+groupadd confluent
+useradd -m -g confluent -s /bin/bash cp-kafka                  # deploy user: SSH login for Ansible, owner of every process
+install -d -m 700 -o cp-kafka -g confluent /home/cp-kafka/.ssh
+install -m 600 -o cp-kafka -g confluent <automation public key> /home/cp-kafka/.ssh/authorized_keys
+install -d -m 750 -o cp-kafka -g confluent /opt/confluent-platform /opt/confluent-platform/certs /kafka/data /var/log/kafka
+loginctl enable-linger cp-kafka                                # user units start at boot without a login
+dnf install -y java-21-openjdk-headless openssl tar python3-pyyaml
+printf '%s\n' 'vm.swappiness = 1' 'vm.dirty_background_ratio = 5' 'vm.dirty_ratio = 80' 'vm.max_map_count = 262144' \
+  > /etc/sysctl.d/90-kafka.conf
+sysctl --system
+```
+
+Then place the host certificate files in `/opt/confluent-platform/certs/` (owner `cp-kafka`, key `0600`; see
+`shared/base/10-security.yml`, TLS) and check the host with the deploy user's SSH key:
+
+```bash
+scripts/run.sh <environment> validate_hosts     # deploy user, linger, no sudo, directories, certificates, Java, sysctl
+```
+
+Not needed any more: service accounts per component, package repositories, systemd units under
+`/usr/lib/systemd/system`, `/etc/kafka` and the other `/etc` directories, `/var/ssl/private`, Kerberos. The
+components run with 524288 open files (hard limit of the user manager; the JVM raises its soft limit).
 
 ### Publish the collections to Nexus (once per version)
 
@@ -206,10 +240,10 @@ scripts/validate.sh             # lint, variable names, syntax, preflight (stati
   password-like value cp-ansible would write into `server.properties` and its siblings out of the file:
   - service configuration: `${env:CP_SECRET_<KEY>}`, resolved by Kafka's `EnvVarConfigProvider`
     (`allowlist.pattern ^CP_SECRET_.*`). Each service gets a systemd `EnvironmentFile`
-    `/var/ssl/private/iac-secrets/<component>.env` (root, `0600`); `systemctl show` lists only its path.
+    `/opt/confluent-platform/secrets/<component>.env` (deploy user, `0600`); `systemctl show` lists only its path.
   - `client.properties` of brokers and controllers (kafka-* CLI tools, cp-ansible health checks, which do not run
-    with the service environment): `${file:/var/ssl/private/iac-secrets/<component>_client.properties:<key>}`
-    (service user, `0400`).
+    with the service environment): `${file:/opt/confluent-platform/secrets/<component>_client.properties:<key>}`
+    (deploy user, `0400`).
 
   The selected keys are the ones Confluent Secret Protection encrypts, so the coverage is the same without a
   master key (`docs/UPSTREAM-NOTES.md`). `iac_config_secrets_provider: file` switches the services to
@@ -217,12 +251,15 @@ scripts/validate.sh             # lint, variable names, syntax, preflight (stati
 - **Rotating a secret**: change the value in the secret store, run `site --skip-tags package -e skip_restarts=true`
   (rewrites the files, restarts nothing), then `restart` for the affected component — a service reads its
   secrets only at startup.
-- **Control node secret files.** cp-ansible reads these files on the control node and copies them to the
-  hosts. Provide them in `$IAC_SECRETS_DIR` (default `.secrets/<environment>`, git-ignored):
-  `kafka-<inventory_hostname>.keytab` for every controller and broker (Kerberos). Preflight checks that they exist.
-- **Host TLS certificates are expected on the hosts** (`ssl_custom_certs_remote_src: true`, paths under
-  `/var/ssl/private/`). The identity provider CA certificate (`iac_control_node_ca_cert`) is read from the
-  control node.
+- **Brokers and controllers** authenticate with SASL_SSL: SCRAM-SHA-512 between brokers and from brokers to the
+  KRaft controllers, PLAIN between the controllers (SCRAM is not possible there). Their two passwords
+  (`IAC_SECRET_KAFKA_BROKER_SCRAM_PASSWORD`, `IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD`) must consist of letters
+  and digits; preflight checks it. Changing one of them needs a rolling procedure of its own.
+- **Control node secret files.** Files cp-ansible would read on the control node go into `$IAC_SECRETS_DIR`
+  (default `.secrets/<environment>`, git-ignored). None is needed at the moment.
+- **Host TLS certificates are expected on the hosts** (`ssl_custom_certs_remote_src: true`,
+  `/opt/confluent-platform/certs/`: `ca-bundle.crt`, `<inventory_hostname>.crt`, `<inventory_hostname>.key`).
+  The identity provider CA certificate (`iac_control_node_ca_cert`) is read from the control node.
 
 ### Small non-production environments (three hosts)
 
@@ -240,8 +277,9 @@ environment and operation:
 - **Project**: this repository (Bitbucket/Git), branch `main`; the inventory is `environments/<environment>`.
 - **Execution environment**: an image with ansible-core 2.18, Python 3.11+ and the pinned collections of
   `collections/requirements.yml` (built with `ansible-builder`), so every run uses the same versions.
-- **Credentials**: a machine credential (SSH) and a custom credential type "Kafka secrets" whose injector sets
-  the `IAC_SECRET_*` environment variables; one credential per environment.
+- **Credentials**: a machine credential (SSH as the deploy user `cp-kafka`, no privilege escalation) and a
+  custom credential type "Kafka secrets" whose injector sets the `IAC_SECRET_*` environment variables; one
+  credential per environment.
 - **Surveys / extra vars**: `confirm_env` for protected environments, optional tags and limit.
 
 ## Day-to-day operations
@@ -265,6 +303,15 @@ passed as CLI flags because the support bundle callback starts a new `ansible-pl
 inherits the environment. When a run fails, that callback collects a support bundle automatically; disable it
 with `AUTO_SUPPORT_BUNDLE=false`. `run.sh` executes the guard rails first in a separate process without that
 callback, so a refused run never starts collecting diagnostics from the hosts.
+
+On the hosts every component is a `systemd --user` unit of the deploy user:
+
+```bash
+ssh cp-kafka@<host>
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+systemctl --user status 'cp-*'                 # cp-kafka_controller, cp-kafka_broker, cp-schema_registry, ...
+journalctl --user -u cp-kafka_broker           # plus the log files below /var/log/kafka/<component>
+```
 
 `deployment_strategy: rolling` provisions running hosts one at a time through the upstream playbooks.
 Upstream warns that rolling can fail while security modes are being changed; use
@@ -312,8 +359,9 @@ scripts/new-env.sh perf nonprod single-site perf.internal.net
 | A value for one data center | `environments/<env>/group_vars/site_<code>.yml` |
 | A value for one server | `environments/<env>/host_vars/<host>.yml` |
 | A new secret | `vault_<name>` in `shared/base/15-secrets.yml` (env lookup) + entry in `iac_required_secrets` + `secrets.env.example` |
-| Corporate CA rotation | new files on the hosts (`/var/ssl/private/`) and on the runners (`iac_control_node_ca_cert`), then `site` |
+| Corporate CA rotation | new files on the hosts (`/opt/confluent-platform/certs/`) and on the runners (`iac_control_node_ca_cert`), then `site` |
 | Package, Java or collection versions | `shared/base/00-platform.yml`, `collections/requirements.yml` |
+| Deploy user, installation, data or log directory | `shared/base/00-platform.yml` (and the host bootstrap) |
 
 ## Guard rails
 
@@ -326,8 +374,14 @@ scripts/new-env.sh perf nonprod single-site perf.internal.net
   internal replication factor (with `iac_kraft_colocated`: co-location allowed, `node_id` unset, non-production only);
 - topology: stretched hosts belong to exactly one site, both sites host controllers, `broker.rack` matches
   the site; single-site environments have no site groups;
-- deploy mode: registered secrets are set, the MDS super user password is not the upstream default, the
-  keytabs exist, secret masking is on in protected environments.
+- rootless: archive installation, deploy user and path set, cp-ansible >= 8.3.2, every host connects as the
+  deploy user without `become`;
+- deploy mode: registered secrets are set, the MDS super user password is not the upstream default, the SCRAM
+  and PLAIN passwords are letters and digits, secret masking is on in protected environments.
+
+`playbooks/validate_hosts.yml` (connects to the hosts, read-only) checks the host bootstrap: deploy user, linger,
+no passwordless sudo, directories owned by the deploy user, certificate files, Java, keytool, openssl, PyYAML
+and the kernel settings of the brokers.
 
 `scripts/validate.sh` adds linting, the variable-name check, syntax checks and rendering for every environment.
 
@@ -347,7 +401,7 @@ Both expect **self-hosted Linux runners inside the corporate network** (Nexus an
 | Secrets | Environment secrets `IAC_SECRET_*` (`secrets.env.example`), `ANSIBLE_SSH_PRIVATE_KEY`; variable `SSH_KNOWN_HOSTS` | Deployment variables with the same names |
 | Concurrency | one run per environment (`concurrency` group) | deployment concurrency control of deployment environments |
 
-Fetching the keytabs from the secret store is left as a marked step in both pipelines
+Control node secret files (none at the moment) would be fetched in a marked step of both pipelines
 (OD-04). `.github/CODEOWNERS` requires platform leads for `preprod`, `production`, `dr` and architects for
 `shared/`.
 

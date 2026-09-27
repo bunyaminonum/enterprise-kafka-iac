@@ -40,10 +40,40 @@ collection is upgraded.
   4 when a cluster spans two data centers with four or more brokers. Applied in the `stretched-2dc` topology
   only, because `dr` is a prod-tier environment with three brokers.
 
+## Rootless deployment (cp-ansible >= 8.3.2)
+
+- `rootless_enabled: true` skips every task that needs root (`when: not (rootless_enabled | bool)`; tags
+  `privileged`, `package`, `systemd`, `sysctl`, `logrotate`) and generates `systemd --user` units instead:
+  `~/.config/systemd/user/cp-<component>.service` with `Restart=on-failure` and
+  `EnvironmentFile=<rootless_deployment_path>/rootless-bin/<component>.env` (the `*_service_environment_overrides`).
+  `*_service_overrides` become extra `[Service]` lines (`roles/common/templates/rootless.service.j2`), which is how
+  the secret `EnvironmentFile` of `playbooks/config_secrets.yml` reaches the units.
+- With `rootless_deployment_path` set, cp-ansible derives the installation, configuration, keystore
+  (`<path>/ssl`), CLI and JMX exporter paths from it; users and groups become `deployment_user` and
+  `deployment_group`. Data and log directories are overridden in this repository (`iac_data_dir`, `iac_log_dir`).
+- Confluent validated the mode on single nodes ("multi-node needs per-host supervision (future work)",
+  `ROOTLESS_DEPLOYMENT_STEPS.md` of the collection). This repository's multi-node lab run is the reference.
+- `custom_java_path` becomes `JAVA_HOME` of every component; `keytool` is taken from the `PATH`.
+- PyYAML on the hosts: cp-ansible tries `pip install --user PyYAML` when it is missing, which fails without
+  internet access; the host bootstrap installs `python3-pyyaml`.
+
+## SCRAM with KRaft
+
+- `kafka_controller_sasl_protocol: plain,scram` is the documented setting: SCRAM is not supported between KRaft
+  controllers. The first value is also what the brokers use towards the controllers
+  (`sasl.mechanism.controller.protocol`); this repository sets it to `SCRAM-SHA-512` for the brokers
+  (`shared/base/31-kafka-broker.yml`), so PLAIN only remains between the controllers.
+- `roles/kafka_controller/tasks/get_meta_properties.yml` formats the controllers with
+  `kafka-storage format --add-scram` for `sasl_scram_users_final.admin`; `roles/kafka_broker/tasks/main.yml`
+  creates every `sasl_scram_users_final` entry with `kafka-configs` afterwards. The collection's default users
+  (`client`, `schema_registry`, ...) come with public default passwords, as do the default `sasl_plain_users`;
+  `shared/base/10-security.yml` derives their passwords from the secret ones.
+- `super.users` gets `User:<admin principal>` of the first mechanism of each listener
+  (`roles/*/tasks/set_principal.yml`); both admin users are called `kafka` so that the controllers also accept the
+  brokers' SCRAM identity.
+
 ## Paths that live on the control node
 
-- **Kerberos keytabs**: `roles/kerberos/tasks/main.yml` copies `*_kerberos_keytab_path` from the control node
-  (`copy` without `remote_src`) to `*_keytab_path` on the host.
 - **IdP certificate**: `roles/common/tasks/idp_certs.yml` copies `oauth_idp_cert_path` from the control node.
 - Host TLS material can stay on the hosts with `ssl_custom_certs_remote_src: true`.
 
@@ -53,7 +83,7 @@ collection is upgraded.
 |---|---|---|
 | `confluent_cli_repository_baseurl` | public AWS S3 bucket | Nexus |
 | `confluent_common/clients/independent_repository_baseurl` | `https://packages.confluent.io` | Nexus mirror with the same layout |
-| `redhat_java_package_name` | `java-25-openjdk` | `java-21-openjdk` |
+| Java | `java-25-openjdk` installed by the collection | Java 21 from the host bootstrap, `custom_java_path` |
 | `confluent_control_center_next_gen_package_version` | `2.2.0` | `2.5.0` (OD-09) |
 | `mds_super_user_password` | `password` | vault value, preflight rejects `password` |
 | `whitelist_explicit_oauth_urls` | `false` → `-Dorg.apache.kafka.sasl.oauthbearer.allowed.urls=*` | `true` → token and JWKS URIs only |
