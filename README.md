@@ -41,7 +41,7 @@ The design uses nothing but standard Ansible variable precedence plus `hash_beha
 | 1 | Organisation baseline | `shared/base/` (linked as `group_vars/all/00-base`) | every environment |
 | 2a | Tier | `shared/tiers/{nonprod,prod}/` (linked as `05-tier`) | class of environment |
 | 2b | Topology | `shared/topologies/{single-site,stretched-2dc}/` (linked as `06-topology`) | shape of the cluster |
-| 3 | Environment | `environments/<env>/group_vars/all/10-env.yml`, `20-components.yml`, `90-vault.yml` | one environment |
+| 3 | Environment | `environments/<env>/group_vars/all/10-env.yml`, `20-components.yml` | one environment |
 | 4 | Site | `environments/<env>/group_vars/site_<code>.yml` | one data center of a stretched cluster |
 | 5 | Host | `environments/<env>/hosts.yml`, `environments/<env>/host_vars/<host>.yml` | one server |
 
@@ -89,7 +89,7 @@ An environment override looks like `environments/dev100/group_vars/all/20-compon
 4. **Use the cp-ansible extension points**: `<component>_custom_properties`,
    `<component>_service_environment_overrides`, `<component>_custom_java_args`, `<component>_copy_files`, ...
 5. **Anything a lower layer may extend must be a dictionary** (see `iac_required_secrets`).
-6. **Own variables use the `iac_` prefix, secrets the `vault_` prefix** (`cp_*` names are used by the
+6. **Own variables use the `iac_` prefix, secrets the `vault_` prefix** (values from `IAC_SECRET_*`, see Secrets; `cp_*` names are used by the
    collection itself). Every other variable must be known to the pinned collection —
    `scripts/check-vars.py` rejects typos, which Ansible would otherwise ignore silently.
 7. **Layer link names contain no dot** (`00-base`, not `00-base.yml`): Ansible only descends into
@@ -132,12 +132,11 @@ below 3 / `min.insync.replicas=2` in any environment; stretched clusters use 4 (
 │   │   ├── 06-topology -> ../../../../shared/topologies/<topology>
 │   │   ├── 10-env.yml               # identity and endpoints of the environment
 │   │   ├── 20-components.yml        # component overrides of the environment
-│   │   └── 90-vault.yml.example     # template of the secrets file
 │   ├── group_vars/site_<code>.yml   # stretched environments only (broker.rack)
 │   └── host_vars/                   # host specific values
 ├── playbooks/
-│   ├── site.yml                     # preflight + file_secrets + confluent.platform.all
-│   ├── file_secrets.yml             # FileConfigProvider secret files of the hosts
+│   ├── site.yml                     # preflight + config_secrets + confluent.platform.all
+│   ├── config_secrets.yml           # secret files of the hosts, ${env:...} references
 │   ├── health_check.yml, restart.yml, validate_hosts.yml, support_bundle.yml
 │   ├── preflight.yml                # guard rails
 │   ├── render_config.yml            # effective configuration without touching hosts
@@ -188,37 +187,62 @@ scripts/validate.sh             # lint, variable names, syntax, preflight (stati
 
 ### Secrets
 
-- **One vault identity per environment**, named like the environment. `ansible.cfg` sets
-  `vault_id_match = True`, so a value is only decrypted with its own identity.
-- **Encrypt values, not files.** Copy `90-vault.yml.example` to `90-vault.yml` and replace each value with the
-  output of:
+- **No secret in git, no Ansible Vault.** Every secret is an environment variable of the process that runs
+  `ansible-playbook`: `IAC_SECRET_<NAME>` feeds `vault_<name>` (`shared/base/15-secrets.yml`; the `vault_`
+  prefix is only the secret namespace). The names are the same in every environment, the values belong to the
+  environment of the run. `secrets.env.example` lists all of them.
 
   ```bash
-  ansible-vault encrypt_string --vault-id production@prompt --encrypt-vault-id production \
-    --name vault_mds_super_user_password
+  install -d -m 700 ~/.secrets && install -m 600 secrets.env.example ~/.secrets/dev100.env   # fill in the values
+  set -a; . ~/.secrets/dev100.env; set +a                                                     # in the shell of the run
   ```
 
-  Variable names stay reviewable in pull requests, and validation/rendering run without any vault password:
-  encrypted values are only decrypted when used, and static validation replaces them with placeholders.
+  In AWX/Tower a custom credential type per environment injects the same variables (see "AWX / Tower").
 - **Every secret is registered** in `iac_required_secrets` (`shared/base/10-security.yml`; the prod tier adds
   `vault_confluent_license`, `dr` adds `vault_password_encoder_secret`). Preflight refuses to deploy while a
-  registered secret is missing or still `CHANGE_ME`.
-- **No password stays in a generated file.** `playbooks/file_secrets.yml`, imported by `site.yml`, moves every
-  password-like value cp-ansible would write into `server.properties` and its siblings into one file per
-  component on the host — owned by the service user, mode `0400` — and makes the roles template
-  `${file:/var/ssl/private/iac-secrets/<component>.properties:<key>}` references instead. Kafka's
-  FileConfigProvider resolves them at startup and may only read files below `iac_file_secrets_dir`
-  (`config.providers.file.param.allowed.paths`). The selected keys are the ones Confluent Secret Protection
-  encrypts, so the coverage is the same without a master key on the hosts (`docs/UPSTREAM-NOTES.md`). Nothing
-  has to be prepared per environment: the values come from vault during the normal run.
-- **Rotating a secret**: change the value in `90-vault.yml`, run `site` (rewrites the file, restarts nothing),
-  then `restart` for the affected component — a running service reads its secret file only at startup.
+  registered secret is empty and names the missing `IAC_SECRET_*` variable. Static validation and rendering
+  need no secret at all: registered secrets are replaced with placeholders.
+- **No password stays in a generated file.** `playbooks/config_secrets.yml`, imported by `site.yml`, takes every
+  password-like value cp-ansible would write into `server.properties` and its siblings out of the file:
+  - service configuration: `${env:CP_SECRET_<KEY>}`, resolved by Kafka's `EnvVarConfigProvider`
+    (`allowlist.pattern ^CP_SECRET_.*`). Each service gets a systemd `EnvironmentFile`
+    `/var/ssl/private/iac-secrets/<component>.env` (root, `0600`); `systemctl show` lists only its path.
+  - `client.properties` of brokers and controllers (kafka-* CLI tools, cp-ansible health checks, which do not run
+    with the service environment): `${file:/var/ssl/private/iac-secrets/<component>_client.properties:<key>}`
+    (service user, `0400`).
+
+  The selected keys are the ones Confluent Secret Protection encrypts, so the coverage is the same without a
+  master key (`docs/UPSTREAM-NOTES.md`). `iac_config_secrets_provider: file` switches the services to
+  FileConfigProvider as well.
+- **Rotating a secret**: change the value in the secret store, run `site --skip-tags package -e skip_restarts=true`
+  (rewrites the files, restarts nothing), then `restart` for the affected component — a service reads its
+  secrets only at startup.
 - **Control node secret files.** cp-ansible reads these files on the control node and copies them to the
   hosts. Provide them in `$IAC_SECRETS_DIR` (default `.secrets/<environment>`, git-ignored):
-  `kafka-<inventory_hostname>.keytab` for every controller and broker. Preflight checks that they exist.
+  `kafka-<inventory_hostname>.keytab` for every controller and broker (Kerberos). Preflight checks that they exist.
 - **Host TLS certificates are expected on the hosts** (`ssl_custom_certs_remote_src: true`, paths under
   `/var/ssl/private/`). The identity provider CA certificate (`iac_control_node_ca_cert`) is read from the
   control node.
+
+### Small non-production environments (three hosts)
+
+`iac_kraft_colocated: true` in `20-components.yml` runs a KRaft controller and a broker on the same host.
+`node_id` then stays unset in `hosts.yml` (controllers become 9991 + host index, brokers 1 + host index, the
+quorum voters follow). Preflight refuses the mode for the prod tier and protected environments. If Control
+Center shares a host with a controller, move Alertmanager off the controller port:
+`control_center_next_gen_dependency_alertmanager_port: 9195`.
+
+### AWX / Tower
+
+Run the same playbooks through `scripts/run.sh` (or `playbooks/<name>.yml` directly) from a job template per
+environment and operation:
+
+- **Project**: this repository (Bitbucket/Git), branch `main`; the inventory is `environments/<environment>`.
+- **Execution environment**: an image with ansible-core 2.18, Python 3.11+ and the pinned collections of
+  `collections/requirements.yml` (built with `ansible-builder`), so every run uses the same versions.
+- **Credentials**: a machine credential (SSH) and a custom credential type "Kafka secrets" whose injector sets
+  the `IAC_SECRET_*` environment variables; one credential per environment.
+- **Surveys / extra vars**: `confirm_env` for protected environments, optional tags and limit.
 
 ## Day-to-day operations
 
@@ -227,14 +251,14 @@ All runs go through `scripts/run.sh <environment> <playbook> [ansible-playbook a
 ```bash
 scripts/run.sh dev100 site                                   # deploy or reconfigure an environment
 scripts/run.sh dev100 site --tags kafka_broker               # one component
-scripts/run.sh qa file_secrets                               # only the secret files of the hosts
+scripts/run.sh qa config_secrets                             # only the secret files of the hosts
 scripts/run.sh qa health_check                               # read-only checks
 scripts/run.sh dr support_bundle                             # diagnostics archive
 CONFIRM_ENV=production scripts/run.sh production restart --limit site_dc2   # protected environment, one site
-ANSIBLE_VAULT_IDENTITY_LIST=preprod@prompt CONFIRM_ENV=preprod scripts/run.sh preprod site --tags kafka_connect
+CONFIRM_ENV=preprod scripts/run.sh preprod site --tags kafka_connect   # IAC_SECRET_* of preprod exported
 ```
 
-`run.sh` accepts secrets and options through environment variables (`ANSIBLE_VAULT_PASSWORD`,
+`run.sh` accepts secrets and options through environment variables (`IAC_SECRET_*`,
 `ANSIBLE_SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `CONFIRM_ENV`, `PLAYBOOK_TAGS`, `PLAYBOOK_LIMIT`,
 `IAC_SECRETS_DIR`, `IAC_SUPPORT_BUNDLE_DIR`, `AUTO_SUPPORT_BUNDLE`). Secrets are exported instead of being
 passed as CLI flags because the support bundle callback starts a new `ansible-playbook` process that only
@@ -267,13 +291,13 @@ scripts/config-diff.sh origin/main production dr    # limited to some environmen
 ```
 
 Rendering evaluates exactly the variables cp-ansible uses to template `server.properties` and the systemd
-overrides, without connecting to any host and without a vault password. Secret-looking keys are masked.
+overrides, without connecting to any host and without any secret. Secret-looking keys are masked.
 
 ### Add an environment
 
 ```bash
 scripts/new-env.sh perf nonprod single-site perf.internal.net
-# edit environments/perf/hosts.yml and 10-env.yml, create 90-vault.yml, add 'perf' to the CI environment lists
+# edit environments/perf/hosts.yml and 10-env.yml, provide the IAC_SECRET_* variables, add 'perf' to the CI lists
 ```
 
 ## Where does a change go?
@@ -287,7 +311,7 @@ scripts/new-env.sh perf nonprod single-site perf.internal.net
 | Heap of a component | `iac_<component>_heap` (base → tier → environment) |
 | A value for one data center | `environments/<env>/group_vars/site_<code>.yml` |
 | A value for one server | `environments/<env>/host_vars/<host>.yml` |
-| A new secret | `vault_<name>` in every affected `90-vault.yml` + entry in `iac_required_secrets` |
+| A new secret | `vault_<name>` in `shared/base/15-secrets.yml` (env lookup) + entry in `iac_required_secrets` + `secrets.env.example` |
 | Corporate CA rotation | new files on the hosts (`/var/ssl/private/`) and on the runners (`iac_control_node_ca_cert`), then `site` |
 | Package, Java or collection versions | `shared/base/00-platform.yml`, `collections/requirements.yml` |
 
@@ -299,7 +323,7 @@ scripts/new-env.sh perf nonprod single-site perf.internal.net
 - protected environments (`preprod`, `production`, `dr`) require `-e confirm_env=<environment>`;
 - every host belongs to `env_<environment>`, the inventory directory matches `iac_env`, all layers are loaded;
 - KRaft: odd number (≥ 3) of dedicated controllers, pinned and unique `node_id`, enough brokers for the
-  internal replication factor;
+  internal replication factor (with `iac_kraft_colocated`: co-location allowed, `node_id` unset, non-production only);
 - topology: stretched hosts belong to exactly one site, both sites host controllers, `broker.rack` matches
   the site; single-site environments have no site groups;
 - deploy mode: registered secrets are set, the MDS super user password is not the upstream default, the
@@ -320,7 +344,7 @@ Both expect **self-hosted Linux runners inside the corporate network** (Nexus an
 | Push to main | `validate.yml` | `branches.main` |
 | Operation on an environment | `deploy.yml` (manual, environment/operation/confirmation/tags/limit inputs) | `custom.<environment>` (manual, same inputs as variables) |
 | Approvals | GitHub Environments: required reviewers, main only | Deployment environments: deployment permissions, main only |
-| Secrets | Environment secrets `ANSIBLE_VAULT_PASSWORD`, `ANSIBLE_SSH_PRIVATE_KEY`; variable `SSH_KNOWN_HOSTS` | Deployment variables with the same names |
+| Secrets | Environment secrets `IAC_SECRET_*` (`secrets.env.example`), `ANSIBLE_SSH_PRIVATE_KEY`; variable `SSH_KNOWN_HOSTS` | Deployment variables with the same names |
 | Concurrency | one run per environment (`concurrency` group) | deployment concurrency control of deployment environments |
 
 Fetching the keytabs from the secret store is left as a marked step in both pipelines

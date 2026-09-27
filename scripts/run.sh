@@ -9,6 +9,7 @@
 #   ANSIBLE_VAULT_PASSWORD       vault password of <environment> (CI secret)
 #   ANSIBLE_VAULT_IDENTITY_LIST  alternative for interactive use, e.g. production@prompt
 #   ANSIBLE_SSH_PRIVATE_KEY      SSH private key content (CI secret); otherwise the runner identity is used
+#   IAC_SECRET_*                 secrets of <environment> (secrets.env.example, shared/base/15-secrets.yml)
 #   IAC_SECRETS_DIR              control node secret files of <environment>: kafka-<inventory_hostname>.keytab
 #                                for every controller and broker
 #   SSH_KNOWN_HOSTS              known_hosts content for the managed hosts (host keys stay verified)

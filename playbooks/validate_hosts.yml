@@ -6,5 +6,20 @@
   vars:
     iac_require_confirmation: false
 
+# The upstream memory check looks up required_total_memory_mb_<group> for EVERY group of a host, without a default.
+# This repository adds env_<environment> and site_<code> groups, which have no such variable, so the check fails with
+# "No variable found with this name: required_total_memory_mb_env_<environment>". Give these organisational groups a
+# requirement of 0; the component groups keep their upstream values.
+- name: Memory requirements for organisational groups
+  hosts: all
+  gather_facts: false
+  become: false
+  tags: [always]
+  tasks:
+    - name: No memory requirement for env_* and site_* groups
+      ansible.builtin.set_fact:
+        "required_total_memory_mb_{{ item }}": 0   # noqa: var-naming[no-jinja]
+      loop: "{{ group_names | select('match', '^(env|site)_') | list }}"
+
 - name: Confluent Platform host validation
   ansible.builtin.import_playbook: confluent.platform.validate_hosts

@@ -10,7 +10,7 @@ This document describes what changed compared with the first version of this rep
 | 8 per-file symlinks in every `group_vars/all/` (`00-base.yml`, `10-security.yml`, ..., `35-performance.yml`) | 3 directory symlinks: `00-base`, `05-tier`, `06-topology` | The base feature files (10–35) were loaded AFTER the tier (05) and topology (06) layers, so a tier could not override a base value (a prod-tier `num.io.threads: 32` stayed `16`). A new base file also needed 7 new symlinks. |
 | `10-env.yml` (`environment_name`, `cp_*`) | `10-env.yml` (`iac_env`, directory, Kerberos and identity provider endpoints, cluster names) | `cp_*` names are used by the collection itself (`cp_cluster`, `cp_package`, ...). |
 | `95-overrides.yml` | `20-components.yml` | Every shared layer is now loaded before the environment files, no "last word" file is needed. |
-| `90-vault.yml` committed in plain text (dev100 with real values) | `90-vault.yml.example` + per-value encrypted `90-vault.yml` (not part of the repository) | Reviewable pull requests, validation without vault passwords, no secrets in git. |
+| `90-vault.yml` committed in plain text (dev100 with real values) | `IAC_SECRET_*` environment variables (`shared/base/15-secrets.yml`, `secrets.env.example`); nothing in git (not part of the repository) | Reviewable pull requests, validation without vault passwords, no secrets in git. |
 | `shared/base/00-global.yml` | `shared/base/00-platform.yml` | Package installation from the internal mirror, pinned versions, shared JVM options. |
 | `shared/base/10-security.yml`, `20-identity-ldap.yml`, `25-file-config-provider.yml` | `shared/base/10-security.yml` | One security baseline: Kerberos (hardened, AD-compatible), LDAPS/Active Directory, OAuth, RBAC, Secret Protection. |
 | `shared/base/30-observability.yml` | `shared/base/20-observability.yml` | JMX exporter enabled, ports pinned. |
@@ -22,7 +22,7 @@ This document describes what changed compared with the first version of this rep
 | `playbooks/00_preflight.yml` | `playbooks/preflight.yml`, imported by every changing playbook | The deploy playbook did not run the guard rails. |
 | `playbooks/01_deploy_cluster.yml` | `playbooks/site.yml` (imports `confluent.platform.all`) | Direct role imports skipped the upstream serial/rolling logic. |
 | `playbooks/02_health_check.yml` | `playbooks/health_check.yml` (upstream health checks) | |
-| `playbooks/00_distribute_secrets.yml` | `playbooks/file_secrets.yml` | Same idea, but the file is derived from the effective configuration: every password-like key of every component instead of a hand-written list. |
+| `playbooks/00_distribute_secrets.yml` | `playbooks/config_secrets.yml` | Same idea, but the file is derived from the effective configuration: every password-like key of every component instead of a hand-written list. |
 | — | `playbooks/restart.yml`, `validate_hosts.yml`, `support_bundle.yml`, `render_config.yml` | Operations, diagnostics and configuration rendering. |
 | — | `scripts/`, `.github/`, `bitbucket-pipelines.yml`, `requirements*.txt`, `.yamllint`, `.ansible-lint`, `docs/` | Tooling, CI/CD, pinned toolchain, linting, documentation. |
 
@@ -39,9 +39,9 @@ This document describes what changed compared with the first version of this rep
    Controllers now run on dedicated hosts with unique ids (preflight enforces both).
 5. **Layer order**: see "Structure".
 6. **Plain-text secrets**: FileConfigProvider only covered the LDAP bind password; SR, Connect and REST JAAS
-   configurations and MDS credentials were still written in plain text. `playbooks/file_secrets.yml` now covers
-   every password-like key of every component, generated from the effective configuration; the vault file is no
-   longer committed.
+   configurations and MDS credentials were still written in plain text. `playbooks/config_secrets.yml` now covers
+   every password-like key of every component, generated from the effective configuration (`${env:...}` references,
+   EnvVarConfigProvider); secrets come from `IAC_SECRET_*` environment variables, nothing is committed.
 7. **Replication**: RF 1 in the single-site topology (inherited by `dr`), RF 3 with `min.insync.replicas=2` in
    the stretched topology, and internal topics with mixed RF (offsets 4, metadata/license/balancer 3).
    Now: RF 3 everywhere, RF 4 (2 per site) and `default_internal_replication_factor: 4` for stretched clusters.
@@ -74,9 +74,10 @@ This document describes what changed compared with the first version of this rep
 2. Publish `confluent.platform` 8.3.1, `ansible.posix` 2.1.0 and `community.general` 12.6.5 to the Nexus raw
    repository (README, "Publish the collections").
 3. Replace the placeholder host names, domains and endpoints (`hosts.yml`, `10-env.yml`, `shared/base`).
-4. Create one vault identity per environment and the per-value encrypted `90-vault.yml` files.
-5. Provide the keytabs per environment and wire them into the pipelines (OD-04). No master key is needed: the
-   secret files on the hosts are generated from vault on every run (`playbooks/file_secrets.yml`).
+4. Provide the `IAC_SECRET_*` variables of every environment from the secret store (`secrets.env.example`).
+5. Provide the keytabs and the `IAC_SECRET_*` variables per environment and wire them into the pipelines or AWX
+   (OD-04). No master key is needed: the secret files on the hosts are generated on every run
+   (`playbooks/config_secrets.yml`).
 6. Configure the CI system: self-hosted runners labelled `kafka-iac`, one environment per inventory directory,
    secrets, `SSH_KNOWN_HOSTS`, approvals for `preprod`, `production`, `dr`.
 7. If the lab directory is OpenLDAP, enable the override prepared in

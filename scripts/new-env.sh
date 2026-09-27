@@ -8,7 +8,7 @@
 #   domain    DNS / Active Directory domain of the environment (default: <name>.internal.net)
 #
 # The generated files are templates: replace host names and endpoints, keep node_id values unique,
-# create 90-vault.yml from 90-vault.yml.example and add the environment to the CI environment lists.
+# provide the IAC_SECRET_* variables of the environment (secrets.env.example) and add it to the CI environment lists.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 cd "$REPO_ROOT"
 
@@ -24,8 +24,6 @@ activate_venv
 python3 - "$name" "$tier" "$topology" "$domain" <<'PYTHON'
 import pathlib
 import sys
-
-import yaml
 
 name, tier, topology, domain = sys.argv[1:5]
 root = pathlib.Path("environments") / name
@@ -105,7 +103,7 @@ kerberos:                         # merged key by key with the baseline hardenin
   kdc_hostname: ad.{domain}
   admin_hostname: ad.{domain}
 
-# Identity provider (OAuth). Client secrets live in 90-vault.yml.
+# Identity provider (OAuth). Client secrets come from IAC_SECRET_* variables (secrets.env.example).
 iac_oauth_base_url: https://sso.{domain}/oauth2
 iac_oauth_expected_audience: kafka-{name}
 iac_oauth_client_ids:
@@ -127,15 +125,6 @@ iac_oauth_client_ids:
 # =============================================================================
 {{}}
 """)
-
-required = {}
-for source in ("shared/base/10-security.yml", f"shared/tiers/{tier}/00-tier.yml"):
-    required.update((yaml.safe_load(pathlib.Path(source).read_text()) or {}).get("iac_required_secrets") or {})
-(gv / "90-vault.yml.example").write_text(f"""---
-# Secrets of the "{name}" environment - TEMPLATE (files ending in .example are ignored by Ansible).
-# Copy to 90-vault.yml and replace every value with an individually encrypted string:
-#   ansible-vault encrypt_string --vault-id {name}@prompt --encrypt-vault-id {name} --name <variable>
-""" + "".join(f"{key}: CHANGE_ME\n" for key, value in required.items() if value))
 
 if sites:
     for site, role in (("dc1", "primary"), ("dc2", "secondary")):
@@ -160,4 +149,4 @@ else:
 PYTHON
 
 log "created environments/$name (tier=$tier, topology=$topology, domain=$domain)"
-log "next: edit hosts.yml and 10-env.yml, create 90-vault.yml, add '$name' to the CI environment lists"
+log "next: edit hosts.yml and 10-env.yml, provide the IAC_SECRET_* variables (secrets.env.example), add '$name' to the CI environment lists"

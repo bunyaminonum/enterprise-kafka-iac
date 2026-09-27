@@ -5,7 +5,14 @@ iac_kafka_connect_heap: "-Xms1g -Xmx2g"
 kafka_connect_service_environment_overrides:
   KAFKA_HEAP_OPTS: "{{ iac_kafka_connect_heap }}"
 
+# Converter credentials: with RBAC, Schema Registry rejects anonymous requests, but cp-ansible only writes the
+# converters' URL and TLS settings. Without these lines every Avro/Protobuf/JSON Schema task fails with 401
+# while the connector itself still reports RUNNING. The values are moved out of the file (config_secrets.yml).
 kafka_connect_custom_properties:
   config.storage.replication.factor: 3
   offset.storage.replication.factor: 3
   status.storage.replication.factor: 3
+  key.converter.basic.auth.credentials.source: USER_INFO
+  key.converter.schema.registry.basic.auth.user.info: "{{ kafka_connect_ldap_user }}:{{ kafka_connect_ldap_password }}"
+  value.converter.basic.auth.credentials.source: USER_INFO
+  value.converter.schema.registry.basic.auth.user.info: "{{ kafka_connect_ldap_user }}:{{ kafka_connect_ldap_password }}"

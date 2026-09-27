@@ -81,9 +81,9 @@
       when: false
       tags: [never]
 
-    - name: FileConfigProvider references (as site.yml sets them)
-      ansible.builtin.import_tasks: tasks/file_secrets.yml
-      when: iac_file_secrets_enabled | bool
+    - name: Secret references (as site.yml sets them)
+      ansible.builtin.import_tasks: tasks/config_secrets.yml
+      when: iac_config_secrets_enabled | bool
 
     - name: Render final properties and service environment in memory (per host, no module run)
       ansible.builtin.set_fact:
@@ -112,3 +112,8 @@
       delegate_to: localhost
       run_once: true
       changed_when: true
+      vars:
+        # The inventory sets ansible_become for the managed hosts; a variable outranks the play keyword
+        # "become: false", so without this the files are written with sudo on the control node (root-owned
+        # build/, and no run at all where the operator has no sudo there).
+        ansible_become: false

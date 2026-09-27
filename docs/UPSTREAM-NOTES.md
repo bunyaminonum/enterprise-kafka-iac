@@ -62,24 +62,40 @@ collection is upgraded.
 
 ## Secret Protection is not used
 
-- `secrets_protection_enabled` stays `false`. The password-like values are moved into per-component files and
-  resolved by Kafka's FileConfigProvider instead (`playbooks/file_secrets.yml`, `shared/base/10-security.yml`).
+- `secrets_protection_enabled` stays `false`. The password-like values are taken out of the properties files by
+  `playbooks/config_secrets.yml` and resolved by a Kafka config provider instead (`shared/base/10-security.yml`).
 - Reason: Secret Protection needs a master key on every host, and cp-ansible writes it as
-  `Environment="CONFLUENT_SECURITY_MASTER_KEY=..."` into the systemd override. systemd exposes unit
-  environments to unprivileged users (`systemctl show <unit> -p Environment`), so on the host the encryption
-  adds little over file permissions — while adding a key that has to be kept in vault and rotated.
+  `Environment="CONFLUENT_SECURITY_MASTER_KEY=..."` into the systemd override. systemd exposes `Environment=`
+  lines to unprivileged users (`systemctl show <unit> -p Environment`), so on the host the encryption adds little
+  over file permissions — while adding a key that has to be kept and rotated.
 - The key selection is taken from `roles/common/tasks/secrets_protection.yml` (`.*password.*`,
   `.*basic.auth.user.info.*`, `^ldap.java.naming.security.credentials$`, `^confluent.license$`,
   `.*sasl.jaas.config`), so the coverage is identical. The KRaft controller `client.properties`, which Secret
   Protection leaves in plain text, is covered as well.
-- Values are written with `java.util.Properties` escaping and read back by
-  `org.apache.kafka.common.config.provider.FileConfigProvider`. The REST Proxy needs its own provider for the
-  `client.*` keys (`client.config.providers`), exactly as the collection does for Secret Protection
-  ("Edge case for RP only" in `roles/variables/vars/main.yml`).
-- Going back to Secret Protection: `iac_file_secrets_enabled: false`, `secrets_protection_enabled: true` and
+- Going back to Secret Protection: `iac_config_secrets_enabled: false`, `secrets_protection_enabled: true` and
   the `secrets_protection_masterkey` / `secrets_protection_security_file` pair (see the git history of
   `shared/base/10-security.yml`). Preflight then requires the security file again and the hosts need the
   Confluent CLI 3.0.0 or newer (`roles/common/tasks/config_validations.yml`).
+
+## EnvVarConfigProvider (default provider)
+
+- `org.apache.kafka.common.config.provider.EnvVarConfigProvider` (KIP-887) ships with every component of this
+  release: CP 8.3.1 (broker, controller, Schema Registry, Connect, REST Proxy) and Control Center Next Gen 2.5.0
+  (kafka-clients 8.2.0). `config.providers.env.param.allowlist.pattern` limits it to `CP_SECRET_*`.
+- The values reach the process through a systemd `EnvironmentFile` (root, `0600`). The unit property
+  `Environment` stays empty and `EnvironmentFiles` shows only the path; the values are visible to root and to
+  the service user in `/proc/<pid>/environ`, like a secret file readable by that user.
+- File format: every value in double quotes, `\ " $` and backquote escaped with a backslash. Verified with
+  `systemd-run` and EnvVarConfigProvider for JAAS configs, `$`, quotes, backslashes, empty values and leading or
+  trailing spaces. Line breaks are rejected by `config_secrets.yml`.
+- The override is set through `<component>_service_overrides` (`EnvironmentFile`), which the upstream
+  `override.conf.j2` writes into `[Service]` next to the existing keys (`ExecStart`, ...).
+- `client.properties` stays on FileConfigProvider: the kafka-* CLI tools and the cp-ansible health checks
+  (`kafka-metadata-quorum` for controllers, `kafka-topics` for brokers) read it without the environment of the
+  service.
+- Kafka Connect shares its worker config providers with connector configurations. Whoever may create
+  connectors (RBAC `ResourceOwner` on `Connector`) could reference `${env:CP_SECRET_...}` of the worker — the
+  same holds for FileConfigProvider and Secret Protection. Keep connector creation to trusted principals.
 
 ## Broker health check and rolling restarts
 

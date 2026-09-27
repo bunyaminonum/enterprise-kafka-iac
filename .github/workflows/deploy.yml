@@ -2,7 +2,7 @@
 #
 # Repository configuration (Settings > Environments), one GitHub environment per inventory directory:
 #   dev100, dev, test, qa, preprod, production, dr
-#     secrets:   ANSIBLE_VAULT_PASSWORD   vault password of that environment (vault identity = environment name)
+#     secrets:   IAC_SECRET_*             secrets of that environment (names: secrets.env.example; unused ones may stay empty)
 #                ANSIBLE_SSH_PRIVATE_KEY  optional; otherwise the SSH identity of the runner is used
 #     variables: SSH_KNOWN_HOSTS          known_hosts entries of the managed hosts (host keys are verified)
 #   preprod, production, dr: "Required reviewers" and "Deployment branches: main only"
@@ -79,7 +79,20 @@ jobs:
           CONFIRM_ENV: ${{ inputs.confirm_environment }}
           PLAYBOOK_TAGS: ${{ inputs.tags }}
           PLAYBOOK_LIMIT: ${{ inputs.limit }}
-          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+          IAC_SECRET_LDAP_BIND_PASSWORD: ${{ secrets.IAC_SECRET_LDAP_BIND_PASSWORD }}
+          IAC_SECRET_MDS_SUPER_USER_PASSWORD: ${{ secrets.IAC_SECRET_MDS_SUPER_USER_PASSWORD }}
+          IAC_SECRET_KAFKA_BROKER_LDAP_PASSWORD: ${{ secrets.IAC_SECRET_KAFKA_BROKER_LDAP_PASSWORD }}
+          IAC_SECRET_SCHEMA_REGISTRY_LDAP_PASSWORD: ${{ secrets.IAC_SECRET_SCHEMA_REGISTRY_LDAP_PASSWORD }}
+          IAC_SECRET_KAFKA_CONNECT_LDAP_PASSWORD: ${{ secrets.IAC_SECRET_KAFKA_CONNECT_LDAP_PASSWORD }}
+          IAC_SECRET_KAFKA_REST_LDAP_PASSWORD: ${{ secrets.IAC_SECRET_KAFKA_REST_LDAP_PASSWORD }}
+          IAC_SECRET_CONTROL_CENTER_NEXT_GEN_LDAP_PASSWORD: ${{ secrets.IAC_SECRET_CONTROL_CENTER_NEXT_GEN_LDAP_PASSWORD }}
+          IAC_SECRET_OAUTH_SUPERUSER_CLIENT_SECRET: ${{ secrets.IAC_SECRET_OAUTH_SUPERUSER_CLIENT_SECRET }}
+          IAC_SECRET_SCHEMA_REGISTRY_OAUTH_CLIENT_SECRET: ${{ secrets.IAC_SECRET_SCHEMA_REGISTRY_OAUTH_CLIENT_SECRET }}
+          IAC_SECRET_KAFKA_CONNECT_OAUTH_CLIENT_SECRET: ${{ secrets.IAC_SECRET_KAFKA_CONNECT_OAUTH_CLIENT_SECRET }}
+          IAC_SECRET_KAFKA_REST_OAUTH_CLIENT_SECRET: ${{ secrets.IAC_SECRET_KAFKA_REST_OAUTH_CLIENT_SECRET }}
+          IAC_SECRET_CONTROL_CENTER_OAUTH_CLIENT_SECRET: ${{ secrets.IAC_SECRET_CONTROL_CENTER_OAUTH_CLIENT_SECRET }}
+          IAC_SECRET_CONFLUENT_LICENSE: ${{ secrets.IAC_SECRET_CONFLUENT_LICENSE }}
+          IAC_SECRET_PASSWORD_ENCODER_SECRET: ${{ secrets.IAC_SECRET_PASSWORD_ENCODER_SECRET }}
           ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
         run: scripts/run.sh "$TARGET_ENV" "$PLAYBOOK"

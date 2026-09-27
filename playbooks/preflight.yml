@@ -62,6 +62,15 @@
             - iac_require_confirmation | default(true) | bool
             - not (iac_static_validation | default(false) | bool)
 
+        - name: Co-located KRaft mode is limited to non-production environments
+          ansible.builtin.assert:
+            that:
+              - iac_tier != 'prod'
+              - iac_env not in iac_protected_envs
+            fail_msg: "iac_kraft_colocated is a mode for small non-production environments; refused for '{{ iac_env }}'."
+            quiet: true
+          when: iac_kraft_colocated | default(false) | bool
+
         - name: Every inventory host belongs to the environment group
           ansible.builtin.assert:
             that:
@@ -75,7 +84,9 @@
             that:
               - lookup('ansible.builtin.vars', item, default='') | string | length > 0
               - lookup('ansible.builtin.vars', item, default='') | string != 'CHANGE_ME'
-            fail_msg: "{{ item }} is missing or CHANGE_ME in environments/{{ iac_env }}/group_vars/all/90-vault.yml"
+            fail_msg: >-
+              {{ item }} is empty or CHANGE_ME: export IAC_SECRET_{{ item | regex_replace('^vault_', '') | upper }}
+              for '{{ iac_env }}' (secrets.env.example, shared/base/15-secrets.yml)
             quiet: true
           loop: "{{ iac_required_secrets | dict2items | selectattr('value') | map(attribute='key') | list }}"
           when: not (iac_static_validation | default(false) | bool)
@@ -122,7 +133,20 @@
         that: node_id is defined and (node_id | string) is match('^[0-9]+$')
         fail_msg: "{{ inventory_hostname }} must define an integer node_id in hosts.yml"
         quiet: true
-      when: inventory_hostname in groups['kafka_controller'] + groups['kafka_broker']
+      when:
+        - inventory_hostname in groups['kafka_controller'] + groups['kafka_broker']
+        - not (iac_kraft_colocated | default(false) | bool)
+
+    - name: Co-located KRaft nodes leave node_id unset
+      ansible.builtin.assert:
+        that: node_id is not defined
+        fail_msg: >-
+          {{ inventory_hostname }}: with iac_kraft_colocated the controller and the broker of one host both read
+          node_id. Leave it unset: controllers get 9991 + host index, brokers 1 + host index.
+        quiet: true
+      when:
+        - inventory_hostname in groups['kafka_controller'] + groups['kafka_broker']
+        - iac_kraft_colocated | default(false) | bool
 
     - name: Site membership matches the topology
       ansible.builtin.assert:
@@ -171,16 +195,23 @@
             that:
               - groups['kafka_controller'] | default([]) | length >= 3
               - (groups['kafka_controller'] | length) is odd
+            fail_msg: "Need an odd number (>= 3) of KRaft controllers."
+            quiet: true
+
+        - name: Dedicated controllers and unique node_id values
+          ansible.builtin.assert:
+            that:
               - groups['kafka_controller'] | intersect(groups['kafka_broker'] | default([])) | length == 0
               - iac_node_ids | length == iac_node_ids | unique | length
             fail_msg: >-
-              Need an odd number (>= 3) of dedicated controllers, no broker/controller co-location and
-              node_id values unique across controllers and brokers. node_ids: {{ iac_node_ids }}
+              Need dedicated controllers (no broker/controller co-location) and node_id values unique across
+              controllers and brokers. node_ids: {{ iac_node_ids }}
             quiet: true
           vars:
             iac_node_ids: >-
               {{ (groups['kafka_controller'] + groups['kafka_broker'])
                  | map('extract', hostvars, 'node_id') | map('int') | list }}
+          when: not (iac_kraft_colocated | default(false) | bool)
 
         - name: Enough brokers for the internal replication factor
           ansible.builtin.assert:

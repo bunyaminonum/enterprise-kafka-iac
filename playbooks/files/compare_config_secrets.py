@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compares the FileConfigProvider secret files with the configuration the services run with right now.
 
-Run by playbooks/file_secrets.yml (-e iac_file_secrets_verify=true) BEFORE the properties files are switched
+Run by playbooks/config_secrets.yml (-e iac_config_secrets_verify=true, provider file) BEFORE the properties files are switched
 to ${file:...} references: every value in a secret file must equal the value the service reads today, either
 decrypted from its ${securepass:...} reference (Confluent CLI, master key from the service's override.conf)
 or in plain text. Prints key names and verdicts only, never values.
