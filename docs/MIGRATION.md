@@ -71,7 +71,7 @@ This document describes what changed compared with the first version of this rep
    They stay in the git history; remove them from the history only in coordination with everybody who
    cloned the repository (e.g. `git filter-repo --path environments/dev100/group_vars/all/90-vault.yml
    --invert-paths`, followed by a force push).
-2. Publish `confluent.platform` 8.3.1, `ansible.posix` 2.1.0 and `community.general` 12.6.5 to the Nexus raw
+2. Publish `confluent.platform` 8.3.2, `ansible.posix` 2.1.0 and `community.general` 12.6.5 to the Nexus raw
    repository (README, "Publish the collections").
 3. Replace the placeholder host names, domains and endpoints (`hosts.yml`, `10-env.yml`, `shared/base`).
 4. Provide the `IAC_SECRET_*` variables of every environment from the secret store (`secrets.env.example`).

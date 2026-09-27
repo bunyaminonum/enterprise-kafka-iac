@@ -9,7 +9,7 @@
 #   passwords in generated files    -> ${env:...} references (EnvVarConfigProvider, playbooks/config_secrets.yml)
 #   secrets of this repository      -> environment variables IAC_SECRET_* (00-base/15-secrets.yml), no Ansible Vault
 #
-# The cp-ansible 8.3.1 default listeners already implement this model, no custom listeners are needed:
+# The cp-ansible 8.3.2 default listeners already implement this model, no custom listeners are needed:
 #   INTERNAL   :9092 -> OAUTHBEARER when auth_mode is ldap / oauth / ldap_with_oauth  (applications, CP components)
 #   BROKER     :9091 -> sasl_protocol                                                (broker to broker)
 #   CONTROLLER :9093 -> kafka_controller_sasl_protocol (defaults to sasl_protocol)

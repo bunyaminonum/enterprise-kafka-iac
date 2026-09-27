@@ -9,9 +9,10 @@
 # after the change (scripts/config-diff.sh), so reviewers see exactly what the upgrade changes.
 collections:
   # Option A (default): tarballs published to a Nexus raw repository.
-  #   confluent-platform-8.3.1.tar.gz -> built from tag v8.3.1 with `ansible-galaxy collection build`
+  #   confluent-platform-8.3.2.tar.gz -> built from tag v8.3.2 with `ansible-galaxy collection build`
   #                                      or downloaded from Ansible Galaxy / Automation Hub
-  - name: https://nexus.internal.net/repository/ansible-raw/confluent-platform-8.3.1.tar.gz
+  #   8.3.2 is the first 8.3 release with rootless deployments (rootless_enabled, shared/base/00-platform.yml).
+  - name: https://nexus.internal.net/repository/ansible-raw/confluent-platform-8.3.2.tar.gz
     type: url
   # confluent.platform declares ansible.posix as a dependency. It is listed explicitly because
   # scripts/bootstrap.sh installs with --no-deps (no dependency resolution against public Galaxy).
@@ -26,4 +27,4 @@ collections:
   # Option B: Bitbucket mirror of github.com/confluentinc/cp-ansible, pinned to the release tag.
   # - name: https://bitbucket.internal.net/scm/platform/cp-ansible.git
   #   type: git
-  #   version: v8.3.1
+  #   version: v8.3.2

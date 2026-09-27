@@ -1,7 +1,7 @@
 # enterprise-kafka-iac
 
 Multi-environment deployment repository for **Confluent Platform 8.3 (KRaft)**, built on the official
-cp-ansible collection **`confluent.platform` v8.3.1**. The collection is consumed as a pinned dependency
+cp-ansible collection **`confluent.platform` v8.3.2**. The collection is consumed as a pinned dependency
 and is never forked or edited.
 
 Seven environments — `dev100`, `dev`, `test`, `qa`, `preprod`, `production`, `dr` — share one baseline,
@@ -119,7 +119,7 @@ below 3 / `min.insync.replicas=2` in any environment; stretched clusters use 4 (
 ├── ansible.cfg                      # hash_behaviour=merge, pinned collections path, YAML output, no default inventory
 ├── requirements.txt                 # control node Python dependencies (ansible-core 2.18)
 ├── requirements-dev.txt             # + yamllint, ansible-lint (pinned)
-├── collections/requirements.yml     # pinned confluent.platform 8.3.1 (+ ansible.posix, community.general)
+├── collections/requirements.yml     # pinned confluent.platform 8.3.2 (+ ansible.posix, community.general)
 ├── shared/
 │   ├── base/                        # layer 1: platform, security, observability, one file per component
 │   ├── tiers/{nonprod,prod}/        # layer 2a: heaps, retention, license requirement
@@ -171,8 +171,8 @@ below 3 / `min.insync.replicas=2` in any environment; stretched clusters use 4 (
 From a machine with internet access:
 
 ```bash
-git clone --branch v8.3.1 --depth 1 https://github.com/confluentinc/cp-ansible.git
-ansible-galaxy collection build cp-ansible                       # -> confluent-platform-8.3.1.tar.gz
+git clone --branch v8.3.2 --depth 1 https://github.com/confluentinc/cp-ansible.git
+ansible-galaxy collection build cp-ansible                       # -> confluent-platform-8.3.2.tar.gz
 ansible-galaxy collection download ansible.posix:2.1.0 community.general:12.6.5 -p ./collections-download
 # upload the three tarballs to the Nexus raw repository referenced in collections/requirements.yml
 ```

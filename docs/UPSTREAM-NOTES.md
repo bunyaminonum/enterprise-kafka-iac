@@ -1,4 +1,4 @@
-# Upstream notes (cp-ansible 8.3.1)
+# Upstream notes (cp-ansible 8.3.2)
 
 Behaviours of the `confluent.platform` collection that shaped this repository. File references are relative
 to the collection root (`collections/ansible_collections/confluent/platform/`). Re-check this list when the
