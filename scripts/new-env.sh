@@ -39,7 +39,6 @@ for link, target in (("00-base", "shared/base"), ("05-tier", f"shared/tiers/{tie
     (gv / link).symlink_to(f"../../../../{target}")
 
 base = ",".join(f"DC={part}" for part in domain.split("."))
-realm = domain.upper()
 host = lambda *parts: "-".join((name,) + parts) + ".internal.net"
 
 if topology == "stretched-2dc":
@@ -98,10 +97,6 @@ iac_ldap_url: ldaps://ad.{domain}:636
 iac_ldap_bind_dn: "CN=ldap-bind-user,OU=ServiceAccounts,{base}"
 iac_ldap_user_search_base: "OU=Users,{base}"
 iac_ldap_group_search_base: "OU=Groups,{base}"
-kerberos:                         # merged key by key with the baseline hardening
-  realm: {realm}
-  kdc_hostname: ad.{domain}
-  admin_hostname: ad.{domain}
 
 # Identity provider (OAuth). Client secrets come from IAC_SECRET_* variables (secrets.env.example).
 iac_oauth_base_url: https://sso.{domain}/oauth2

@@ -68,9 +68,7 @@ jobs:
         run: scripts/validate.sh --env "$TARGET_ENV" --no-lint
 
       - name: Materialise control node secret files
-        # TODO(OD-04): fetch from the secret store into $IAC_SECRETS_DIR:
-        #   kafka-<inventory_hostname>.keytab for every controller and broker of $TARGET_ENV
-        # Preflight stops the run if a file is missing.
+        # Control node secret files of $TARGET_ENV, if any (none at the moment, shared/base/10-security.yml).
         run: |
           install -d -m 700 "$IAC_SECRETS_DIR"
 
@@ -86,6 +84,8 @@ jobs:
           IAC_SECRET_KAFKA_CONNECT_LDAP_PASSWORD: ${{ secrets.IAC_SECRET_KAFKA_CONNECT_LDAP_PASSWORD }}
           IAC_SECRET_KAFKA_REST_LDAP_PASSWORD: ${{ secrets.IAC_SECRET_KAFKA_REST_LDAP_PASSWORD }}
           IAC_SECRET_CONTROL_CENTER_NEXT_GEN_LDAP_PASSWORD: ${{ secrets.IAC_SECRET_CONTROL_CENTER_NEXT_GEN_LDAP_PASSWORD }}
+          IAC_SECRET_KAFKA_BROKER_SCRAM_PASSWORD: ${{ secrets.IAC_SECRET_KAFKA_BROKER_SCRAM_PASSWORD }}
+          IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD: ${{ secrets.IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD }}
           IAC_SECRET_OAUTH_SUPERUSER_CLIENT_SECRET: ${{ secrets.IAC_SECRET_OAUTH_SUPERUSER_CLIENT_SECRET }}
           IAC_SECRET_SCHEMA_REGISTRY_OAUTH_CLIENT_SECRET: ${{ secrets.IAC_SECRET_SCHEMA_REGISTRY_OAUTH_CLIENT_SECRET }}
           IAC_SECRET_KAFKA_CONNECT_OAUTH_CLIENT_SECRET: ${{ secrets.IAC_SECRET_KAFKA_CONNECT_OAUTH_CLIENT_SECRET }}

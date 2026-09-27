@@ -23,9 +23,7 @@
       - --under-replicated-partitions
   environment:
     CONFLUENT_SECURITY_MASTER_KEY: "{{ existing_masterkey | default('') }}"
-    KAFKA_OPTS: >-
-      -Xlog:all=error -XX:+IgnoreUnrecognizedVMOptions
-      {{ '-Djava.security.krb5.conf=' ~ kerberos_client_config_file_dest if kerberos_client_config_file_dest != '/etc/krb5.conf' else '' }}
+    KAFKA_OPTS: -Xlog:all=error -XX:+IgnoreUnrecognizedVMOptions
   register: iac_under_replicated
   until: iac_under_replicated.rc == 0 and iac_under_replicated.stdout | trim | length == 0 and 'ERROR' not in iac_under_replicated.stderr
   retries: "{{ iac_isr_wait_retries | default(60) }}"

@@ -3,7 +3,7 @@
 # Preflight: guard rails that run before any cp-ansible play. Nothing here connects to managed hosts.
 #
 # Modes
-#   deploy (default)                  all checks, including secrets, keytabs and the confirmation
+#   deploy (default)                  all checks, including secrets and the confirmation
 #                                     of protected environments (-e confirm_env=<environment>)
 #   -e iac_static_validation=true     pull requests / CI: no vault password needed, secrets are
 #                                     replaced by placeholders, no confirmation required
@@ -110,6 +110,19 @@
             quiet: true
           when: not (iac_static_validation | default(false) | bool)
 
+        - name: SCRAM and PLAIN passwords contain letters and digits only (deploy mode)
+          ansible.builtin.assert:
+            that: lookup('ansible.builtin.vars', item) | string is match('^[A-Za-z0-9]{16,}$')
+            fail_msg: >-
+              {{ item }} (IAC_SECRET_{{ item | regex_replace('^vault_', '') | upper }}) must have at least 16 letters
+              and digits and nothing else: it is written into JAAS configurations and kafka-configs arguments
+              (e.g. openssl rand -hex 24)
+            quiet: true
+          loop:
+            - vault_kafka_broker_scram_password
+            - vault_kafka_controller_plain_password
+          when: not (iac_static_validation | default(false) | bool)
+
         - name: Rootless deployment settings are consistent
           ansible.builtin.assert:
             that:
@@ -194,22 +207,6 @@
       when:
         - iac_topology == 'stretched-2dc'
         - inventory_hostname in groups['kafka_broker']
-
-    - name: Kerberos keytabs exist on the control node (deploy mode)
-      ansible.builtin.assert:
-        that: lookup('ansible.builtin.vars', iac_keytab_var) is file
-        fail_msg: >-
-          Missing keytab {{ lookup('ansible.builtin.vars', iac_keytab_var) }}.
-          Materialise the keytabs of '{{ iac_env }}' into IAC_SECRETS_DIR before the run.
-        quiet: true
-      vars:
-        iac_keytab_var: >-
-          {{ 'kafka_controller_kerberos_keytab_path' if inventory_hostname in groups['kafka_controller']
-             else 'kafka_broker_kerberos_keytab_path' }}
-      when:
-        - sasl_protocol == 'kerberos'
-        - inventory_hostname in groups['kafka_controller'] + groups['kafka_broker']
-        - not (iac_static_validation | default(false) | bool)
 
     # ---------------------------------------------------------------- cluster layout
     - name: Cluster layout checks (once, on the control node)

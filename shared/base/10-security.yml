@@ -4,7 +4,7 @@
 #
 # Target model:
 #   client / application traffic    -> SASL/OAUTHBEARER (corporate identity provider)
-#   inter-broker and KRaft traffic  -> SASL/GSSAPI (Kerberos, Active Directory KDC)
+#   broker and KRaft traffic        -> SASL_SSL: SCRAM-SHA-512, PLAIN between the KRaft controllers only
 #   authorization                   -> Confluent RBAC (MDS) backed by Active Directory (LDAPS)
 #   passwords in generated files    -> ${env:...} references (EnvVarConfigProvider, playbooks/config_secrets.yml)
 #   secrets of this repository      -> environment variables IAC_SECRET_* (00-base/15-secrets.yml), no Ansible Vault
@@ -15,7 +15,7 @@
 #   CONTROLLER :9093 -> kafka_controller_sasl_protocol (defaults to sasl_protocol)
 #
 # Open decisions: OD-01 account naming, OD-02 auth mode, OD-03 MDS topology,
-#                 OD-04 certificate/keytab source, OD-05 MDS super user identity
+#                 OD-04 certificate source, OD-05 MDS super user identity
 # =============================================================================
 
 # ---- Secrets registry --------------------------------------------------------
@@ -37,12 +37,14 @@ iac_required_secrets:
   vault_kafka_connect_oauth_client_secret: true
   vault_kafka_rest_oauth_client_secret: true
   vault_control_center_oauth_client_secret: true
+  vault_kafka_broker_scram_password: true
+  vault_kafka_controller_plain_password: true
 
 # ---- Secret files on the control node ------------------------------------------
-# cp-ansible reads these files on the CONTROL NODE and copies them to the hosts:
-#   kafka-<inventory_hostname>.keytab   Kerberos keytab of every controller and broker
-# The pipeline materialises them from the secret store into IAC_SECRETS_DIR before the run
-# (default: .secrets/<environment>, git-ignored). Preflight checks that they exist.
+# Files cp-ansible would read on the CONTROL NODE and copy to the hosts (e.g. the Secret Protection
+# security.properties). None is needed at the moment: no Kerberos keytabs (SCRAM/PLAIN), the host certificates
+# are placed on the hosts. The pipeline materialises such files into IAC_SECRETS_DIR before the run
+# (default: .secrets/<environment>, git-ignored).
 iac_secrets_dir: "{{ lookup('ansible.builtin.env', 'IAC_SECRETS_DIR', default=inventory_dir ~ '/../../.secrets/' ~ iac_env) }}"
 
 # ---- Passwords in generated files ----------------------------------------------------
@@ -94,29 +96,79 @@ ssl_signed_cert_filepath: "{{ iac_host_certs_dir }}/{{ inventory_hostname }}.crt
 ssl_key_filepath: "{{ iac_host_certs_dir }}/{{ inventory_hostname }}.key"
 # ssl_key_password: "{{ vault_ssl_key_password }}"     # only if the private keys are encrypted
 
-# ---- Kerberos (inter-broker and KRaft) ------------------------------------------
-sasl_protocol: kerberos
-kerberos_configure: true
-kerberos:
-  realm: INTERNAL.NET                    # set per environment (10-env.yml) together with the KDC hosts
-  dns_lookup_realm: false
-  dns_lookup_kdc: false
-  ticket_lifetime: 24h
-  forwardable: true
-  udp_preference_limit: 1                # TCP only: tickets with large PACs do not fit into UDP datagrams
-  # Active Directory issues AES-SHA1 tickets (RFC 3962). Put the RFC 8009 types
-  # (aes256-cts-hmac-sha384-192 aes128-cts-hmac-sha256-128) first only if the KDC supports them.
-  default_tkt_enctypes: "aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96"
-  default_tgs_enctypes: "aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96"
-  permitted_enctypes: "aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96"
-  canonicalize: false
-  allow_weak_crypto: false
-# *_kerberos_keytab_path is a path on the ANSIBLE CONTROL NODE: the cp-ansible kerberos role copies the
-# keytab from there to *_keytab_path on the host (copy without remote_src).
-kafka_controller_kerberos_keytab_path: "{{ iac_secrets_dir }}/kafka-{{ inventory_hostname }}.keytab"
-kafka_controller_kerberos_principal: "kafka/{{ inventory_hostname }}@{{ kerberos.realm }}"
-kafka_broker_kerberos_keytab_path: "{{ iac_secrets_dir }}/kafka-{{ inventory_hostname }}.keytab"
-kafka_broker_kerberos_principal: "kafka/{{ inventory_hostname }}@{{ kerberos.realm }}"
+# ---- Broker and KRaft authentication: SASL_SSL with SCRAM-SHA-512 and PLAIN ----------------
+#   broker <-> broker, controller -> broker   BROKER listener :9091       SCRAM-SHA-512
+#   broker -> controller                      CONTROLLER listener :9093   SCRAM-SHA-512
+#   controller <-> controller                 CONTROLLER listener :9093   PLAIN
+# KRaft controllers cannot authenticate each other with SCRAM: its credentials live in the metadata log that the
+# controllers serve (Confluent: "SCRAM is not supported for KRaft controller-to-controller communication"; the
+# documented setting is kafka_controller_sasl_protocol: plain,scram). GSSAPI is not used anywhere.
+# The FIRST value of kafka_controller_sasl_protocol is what controllers AND brokers use towards the controllers;
+# sasl.mechanism.controller.protocol in shared/base/31-kafka-broker.yml keeps the brokers on SCRAM-SHA-512, so
+# PLAIN is only used between the controllers.
+sasl_protocol: scram
+kafka_controller_sasl_protocol: plain,scram
+# SCRAM users live in the KRaft metadata: cp-ansible adds admin when it formats the controllers' storage
+# (kafka-storage format --add-scram) and creates all of them with kafka-configs after the first start.
+# PLAIN users live in the JAAS configuration of the CONTROLLER listener (user_<principal>="<password>").
+# admin is the identity brokers (SCRAM) and controllers (PLAIN) log in with. Both are called kafka: cp-ansible
+# adds User:<principal> of the first mechanism to super.users, and a controller must accept a broker that logs
+# in with the other mechanism.
+# cp-ansible also creates its default users (client, schema_registry, ...) with PUBLIC default passwords
+# (client-secret, ...). The components authenticate with OAUTHBEARER on INTERNAL :9092 and never use them, so
+# their passwords are derived from the admin passwords: nobody knows them and they need no secret of their own.
+# The passwords are written into JAAS configurations and kafka-configs arguments: letters and digits only
+# (preflight checks it).
+sasl_scram_users:
+  admin:
+    principal: kafka
+    password: "{{ vault_kafka_broker_scram_password }}"
+  client:
+    principal: client
+    password: "{{ (vault_kafka_broker_scram_password ~ ':client') | hash('sha256') }}"
+  schema_registry:
+    principal: schema_registry
+    password: "{{ (vault_kafka_broker_scram_password ~ ':schema_registry') | hash('sha256') }}"
+  kafka_connect:
+    principal: kafka_connect
+    password: "{{ (vault_kafka_broker_scram_password ~ ':kafka_connect') | hash('sha256') }}"
+  kafka_rest:
+    principal: kafka_rest
+    password: "{{ (vault_kafka_broker_scram_password ~ ':kafka_rest') | hash('sha256') }}"
+  ksql:
+    principal: ksql
+    password: "{{ (vault_kafka_broker_scram_password ~ ':ksql') | hash('sha256') }}"
+  control_center_next_gen:
+    principal: control_center
+    password: "{{ (vault_kafka_broker_scram_password ~ ':control_center_next_gen') | hash('sha256') }}"
+  kafka_connect_replicator:
+    principal: kafka_connect_replicator
+    password: "{{ (vault_kafka_broker_scram_password ~ ':kafka_connect_replicator') | hash('sha256') }}"
+sasl_plain_users:
+  admin:
+    principal: kafka
+    password: "{{ vault_kafka_controller_plain_password }}"
+  client:
+    principal: client
+    password: "{{ (vault_kafka_controller_plain_password ~ ':client') | hash('sha256') }}"
+  schema_registry:
+    principal: schema_registry
+    password: "{{ (vault_kafka_controller_plain_password ~ ':schema_registry') | hash('sha256') }}"
+  kafka_connect:
+    principal: kafka_connect
+    password: "{{ (vault_kafka_controller_plain_password ~ ':kafka_connect') | hash('sha256') }}"
+  kafka_rest:
+    principal: kafka_rest
+    password: "{{ (vault_kafka_controller_plain_password ~ ':kafka_rest') | hash('sha256') }}"
+  ksql:
+    principal: ksql
+    password: "{{ (vault_kafka_controller_plain_password ~ ':ksql') | hash('sha256') }}"
+  control_center_next_gen:
+    principal: control_center
+    password: "{{ (vault_kafka_controller_plain_password ~ ':control_center_next_gen') | hash('sha256') }}"
+  kafka_connect_replicator:
+    principal: kafka_connect_replicator
+    password: "{{ (vault_kafka_controller_plain_password ~ ':kafka_connect_replicator') | hash('sha256') }}"
 
 # ---- Authorization: RBAC + OAuth ---------------------------------------------------
 rbac_enabled: true

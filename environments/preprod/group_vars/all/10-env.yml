@@ -16,10 +16,6 @@ iac_ldap_url: ldaps://ad.preprod.internal.net:636
 iac_ldap_bind_dn: "CN=ldap-bind-user,OU=ServiceAccounts,DC=preprod,DC=internal,DC=net"
 iac_ldap_user_search_base: "OU=Users,DC=preprod,DC=internal,DC=net"
 iac_ldap_group_search_base: "OU=Groups,DC=preprod,DC=internal,DC=net"
-kerberos:                         # merged key by key with the baseline hardening
-  realm: PREPROD.INTERNAL.NET
-  kdc_hostname: ad.preprod.internal.net
-  admin_hostname: ad.preprod.internal.net
 
 # Identity provider (OAuth). Client secrets live in 90-vault.yml.
 iac_oauth_base_url: https://sso.preprod.internal.net/oauth2

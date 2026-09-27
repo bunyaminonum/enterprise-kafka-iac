@@ -3,8 +3,8 @@
 # Frequently tuned knobs are exposed as iac_* parameters; lower layers only override the parameter.
 iac_kafka_broker_heap: "-Xms6g -Xmx6g"
 
-# merge semantics: only KAFKA_HEAP_OPTS is replaced. The upstream KAFKA_OPTS (JMX exporter agent,
-# Kerberos JAAS), KAFKA_LOG4J_OPTS and LOG_DIR keys survive. With hash_behaviour=replace they would be lost.
+# merge semantics: only KAFKA_HEAP_OPTS is replaced. The upstream KAFKA_OPTS (JMX exporter agent),
+# KAFKA_LOG4J_OPTS and LOG_DIR keys survive. With hash_behaviour=replace they would be lost.
 kafka_broker_service_environment_overrides:
   KAFKA_HEAP_OPTS: "{{ iac_kafka_broker_heap }} {{ iac_jvm_g1_opts }}"
 
@@ -19,6 +19,9 @@ kafka_broker_custom_properties:
   unclean.leader.election.enable: false
   num.partitions: 6
   confluent.balancer.enable: true
+  # Brokers authenticate to the KRaft controllers with SCRAM-SHA-512 instead of the controllers' PLAIN
+  # (10-security.yml, "Broker and KRaft authentication").
+  sasl.mechanism.controller.protocol: SCRAM-SHA-512
   # Confluent Server license. Registered as a required secret for the prod tier; empty elsewhere (trial mode).
   confluent.license: "{{ vault_confluent_license | default('') }}"
 
