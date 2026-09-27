@@ -4,7 +4,7 @@
 iac_kafka_controller_heap: "-Xms2g -Xmx2g"
 
 kafka_controller_custom_properties:
-  log.dirs: /var/lib/controller/data
+  log.dirs: "{{ iac_data_dir }}/controller"
 
 # merge semantics: only KAFKA_HEAP_OPTS is replaced; upstream keys (KAFKA_OPTS, LOG_DIR, ...) are kept.
 kafka_controller_service_environment_overrides:

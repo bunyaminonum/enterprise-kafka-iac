@@ -66,7 +66,7 @@ Taken from `build/rendered/production/prod-dc2-broker-04.internal.net/` (see
 
 | Final value | Source |
 |---|---|
-| `log.dirs=/var/lib/kafka/data` | layer 1 — `shared/base/31-kafka-broker.yml` |
+| `log.dirs=/kafka/data/broker` | layer 1 — `shared/base/31-kafka-broker.yml` (`iac_data_dir` from `00-platform.yml`) |
 | `ldap.java.naming.provider.url=ldaps://ad.prod.internal.net:636` | layer 1 (`10-security.yml`) using `iac_ldap_url` from layer 3 |
 | `log.retention.hours=168`, `KAFKA_HEAP_OPTS=-Xms6g -Xmx6g ...` | layer 2a — `shared/tiers/prod/00-tier.yml` |
 | `default.replication.factor=4`, `offsets.topic.replication.factor=4`, `confluent.metadata.topic.replication.factor=4`, `replica.selector.class=...RackAwareReplicaSelector` | layer 2b — `shared/topologies/stretched-2dc/` |

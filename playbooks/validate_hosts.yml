@@ -21,5 +21,126 @@
         "required_total_memory_mb_{{ item }}": 0   # noqa: var-naming[no-jinja]
       loop: "{{ group_names | select('match', '^(env|site)_') | list }}"
 
+# Rootless deployments: the one-time host bootstrap (root, README "Host bootstrap") is complete. Read-only checks,
+# run as the deploy user; nothing here needs or uses root.
+- name: Rootless host bootstrap
+  hosts: all
+  gather_facts: true
+  gather_subset: [min, mounts]
+  become: false
+  tags: [always]
+  tasks:
+    - name: Rootless checks
+      when: rootless_enabled | bool
+      block:
+        - name: Connected as the deploy user
+          ansible.builtin.assert:
+            that: ansible_facts.user_id == deployment_user
+            fail_msg: "Connected as {{ ansible_facts.user_id }}, expected the deploy user {{ deployment_user }}"
+            quiet: true
+
+        - name: Linger and sudo state of the deploy user
+          ansible.builtin.command:
+            argv: "{{ item }}"
+          loop:
+            - [loginctl, show-user, "{{ deployment_user }}", --property=Linger, --value]
+            - [sudo, -n, "true"]
+          register: iac_account
+          changed_when: false
+          failed_when: false
+
+        - name: Linger is enabled (the systemd --user units start at boot without a login)
+          ansible.builtin.assert:
+            that: iac_account.results[0].stdout | trim == 'yes'
+            fail_msg: "Linger is off for {{ deployment_user }}. Bootstrap (root): loginctl enable-linger {{ deployment_user }}"
+            quiet: true
+
+        - name: The deploy user has no passwordless sudo (the deployment must not depend on it)
+          ansible.builtin.assert:
+            that: iac_account.results[1].rc != 0
+            fail_msg: "{{ deployment_user }} can run 'sudo -n true'; a rootless deploy user must not have general sudo rights."
+            quiet: true
+
+        - name: Directories of the bootstrap
+          ansible.builtin.stat:
+            path: "{{ item }}"
+          loop:
+            - "{{ rootless_deployment_path }}"
+            - "{{ iac_data_dir }}"
+            - "{{ iac_log_dir }}"
+            - "{{ iac_host_certs_dir }}"
+          register: iac_dirs
+
+        - name: Directories exist and belong to the deploy user
+          ansible.builtin.assert:
+            that:
+              - item.stat.isdir | default(false)
+              - item.stat.pw_name == deployment_user
+              - item.stat.writeable
+            fail_msg: "{{ item.item }} must exist as a directory owned by and writable for {{ deployment_user }}"
+            quiet: true
+          loop: "{{ iac_dirs.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+
+        - name: Certificate files
+          ansible.builtin.stat:
+            path: "{{ item }}"
+          loop:
+            - "{{ ssl_ca_cert_filepath }}"
+            - "{{ ssl_signed_cert_filepath }}"
+            - "{{ ssl_key_filepath }}"
+          register: iac_certs
+          when: ssl_custom_certs | bool and ssl_custom_certs_remote_src | bool
+
+        - name: Certificate files are readable by the deploy user
+          ansible.builtin.assert:
+            that: item.stat.readable | default(false)
+            fail_msg: "{{ item.item }} is missing or not readable for {{ deployment_user }}"
+            quiet: true
+          loop: "{{ iac_certs.results | default([]) }}"
+          loop_control:
+            label: "{{ item.item }}"
+          when: iac_certs is not skipped
+
+        - name: Java, keytool, openssl, tar and PyYAML
+          ansible.builtin.command:
+            argv: "{{ item }}"
+          loop:
+            - ["{{ custom_java_path }}/bin/java", -version]
+            - [sh, -c, command -v keytool]
+            - [openssl, version]
+            - [tar, --version]
+            - ["{{ ansible_facts.python.executable }}", -c, import yaml]
+          register: iac_tools
+          changed_when: false
+          failed_when: false
+
+        - name: Tools of the bootstrap are installed
+          ansible.builtin.assert:
+            that: item.rc == 0
+            fail_msg: "Missing on {{ inventory_hostname }}: {{ item.item | join(' ') }} (bootstrap packages: java-21-openjdk-headless openssl python3-pyyaml)"
+            quiet: true
+          loop: "{{ iac_tools.results }}"
+          loop_control:
+            label: "{{ item.item | join(' ') }}"
+
+        - name: Kernel settings of the brokers
+          ansible.builtin.slurp:
+            src: "/proc/sys/{{ item.key | replace('.', '/') }}"
+          loop: "{{ kafka_broker_sysctl | dict2items }}"
+          register: iac_sysctl
+          when: inventory_hostname in groups['kafka_broker'] | default([])
+
+        - name: Kernel settings equal kafka_broker_sysctl (applied by the bootstrap)
+          ansible.builtin.assert:
+            that: item.content | b64decode | trim == item.item.value | string
+            fail_msg: "{{ item.item.key }} is {{ item.content | b64decode | trim }}, expected {{ item.item.value }} (bootstrap: sysctl)"
+            quiet: true
+          loop: "{{ iac_sysctl.results | default([]) }}"
+          loop_control:
+            label: "{{ item.item.key }}"
+          when: iac_sysctl is not skipped
+
 - name: Confluent Platform host validation
   ansible.builtin.import_playbook: confluent.platform.validate_hosts

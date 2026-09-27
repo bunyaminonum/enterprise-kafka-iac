@@ -35,6 +35,14 @@ deployment_group: confluent
 # Binaries, configuration, keystores, secret files and the systemd environment files of the components.
 # Size (CP 8.3.1): 1.8 GB per host, 3.5 GB on the Control Center host (archives are unpacked, not kept).
 rootless_deployment_path: /opt/confluent-platform
+# Directory layout of every host. The host bootstrap creates rootless_deployment_path, iac_data_dir and iac_log_dir
+# and gives them to the deploy user (who cannot create directories in /opt, / or /var/log); the components
+# create their own subdirectories below them.
+#   iac_data_dir   data disk: <iac_data_dir>/controller (KRaft metadata), /broker (Kafka data),
+#                  /control-center (Control Center Next Gen and its Prometheus)
+#   iac_log_dir    log disk: one subdirectory per component (shared/base/20-observability.yml)
+iac_data_dir: /kafka/data
+iac_log_dir: /var/log/kafka
 
 # ---- Air-gapped package sources ---------------------------------------------
 # Every download goes through Nexus. The "confluent-packages" repository must proxy or mirror
