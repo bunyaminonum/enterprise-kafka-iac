@@ -14,15 +14,27 @@ confluent_package_version: "8.3.1"
 # The collection defaults to 2.2.0. Pin the Control Center Next Gen release validated for CP 8.3.
 confluent_control_center_next_gen_package_version: "2.5.0"   # TODO(OD-09): confirm against the package mirror
 
-# ---- Installation method ----------------------------------------------------
-# package: RPMs from the internal mirror, configuration in /etc/kafka, services as systemd units.
-installation_method: package
+# ---- Installation: rootless (Ansible gets no sudo) ---------------------------
+# Ansible never escalates privileges on the hosts. A sudoers file that allows single commands does not help:
+# Ansible runs its modules as temporary scripts, so its privilege escalation must be general ("Privilege
+# escalation must be general", Ansible documentation). cp-ansible's rootless mode (>= 8.3.2) installs and runs
+# Confluent Platform as ONE unprivileged deploy user instead:
+#   - Ansible connects as the deploy user (ansible_user, below) and never uses become
+#   - the tarballs are unpacked below rootless_deployment_path (installation_method archive, no RPMs)
+#   - every component runs as a systemd --user unit of the deploy user: cp-<component>.service
+#     (as the deploy user: XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user status 'cp-*')
+# Root is needed ONCE per host before the first run (README, "Host bootstrap"): the user and group, the
+# directories of this baseline, loginctl enable-linger (units start at boot without a login), Java and the
+# kernel settings (kafka_broker_sysctl). cp-ansible skips its root-only tasks by itself; validate_hosts checks
+# that the bootstrap was done.
+rootless_enabled: true
+installation_method: archive
 confluent_server_enabled: true
-# Alternative (previous layout of this repository): tarballs copied from the control node.
-# installation_method: archive
-# archive_destination_path: /opt/confluent
-# confluent_archive_file_remote: false
-# confluent_archive_file_source: "/opt/confluent-platform/packages/confluent-{{ confluent_package_version }}.tar.gz"
+deployment_user: cp-kafka
+deployment_group: confluent
+# Binaries, configuration, keystores, secret files and the systemd environment files of the components.
+# Size (CP 8.3.1): 1.8 GB per host, 3.5 GB on the Control Center host (archives are unpacked, not kept).
+rootless_deployment_path: /opt/confluent-platform
 
 # ---- Air-gapped package sources ---------------------------------------------
 # Every download goes through Nexus. The "confluent-packages" repository must proxy or mirror
@@ -37,10 +49,10 @@ confluent_independent_repository_baseurl: "{{ iac_nexus_url }}/confluent-package
 confluent_cli_repository_baseurl: "{{ iac_nexus_url }}/confluent-cli"
 
 # ---- Java --------------------------------------------------------------------
-# Headless JRE 21 (no GUI libraries on servers). The collection default is java-25-openjdk.
-redhat_java_package_name: java-21-openjdk-headless
-# If the OS team pre-installs Java, use this instead (install_java then becomes false automatically):
-# custom_java_path: /usr/lib/jvm/jre-21-openjdk
+# Java 21 is installed by the host bootstrap (java-21-openjdk-headless): a rootless run cannot install packages.
+# custom_java_path turns the collection's Java installation off and becomes JAVA_HOME of every component.
+# keytool (same package) must be on the PATH of the deploy user; validate_hosts checks both.
+custom_java_path: /usr/lib/jvm/jre-21-openjdk
 
 # JVM options of Confluent's production guidance, shared by all JVM components (heap sizes come from the tiers).
 iac_jvm_g1_opts: >-
@@ -49,9 +61,10 @@ iac_jvm_g1_opts: >-
   -XX:MinMetaspaceFreeRatio=50 -XX:MaxMetaspaceFreeRatio=80
 
 # ---- Execution behaviour -----------------------------------------------------
-# Privilege escalation for the managed hosts only (not set globally in ansible.cfg, so that tasks
-# delegated to the control node do not need sudo there).
-ansible_become: true
+# Ansible connects as the deploy user (the owner of the systemd --user units) and never escalates. Tasks
+# delegated to the control node run as the user of the ansible-playbook process.
+ansible_user: "{{ deployment_user }}"
+ansible_become: false
 # rolling = serial provisioning (one host at a time) for hosts whose service is already running;
 # cp-ansible always provisions not-yet-running (greenfield) hosts in parallel. This only works through the
 # upstream playbooks (playbooks/site.yml imports confluent.platform.all).

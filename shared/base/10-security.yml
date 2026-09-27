@@ -50,8 +50,8 @@ iac_secrets_dir: "{{ lookup('ansible.builtin.env', 'IAC_SECRETS_DIR', default=in
 # credentials, license) into the properties files. playbooks/config_secrets.yml (imported by site.yml) takes
 # these values out of the properties files and makes the roles write references instead:
 #   provider env  (default)  ${env:CP_SECRET_<KEY>}; each service gets a systemd EnvironmentFile
-#                            <iac_config_secrets_dir>/<component>.env (root, 0600). systemctl show lists only
-#                            the path of that file, never its values.
+#                            <iac_config_secrets_dir>/<component>.env (iac_config_secrets_owner, 0600).
+#                            systemctl show lists only the path of that file, never its values.
 #   provider file            ${file:<iac_config_secrets_dir>/<component>.properties:<key>} (service user, 0400)
 # client.properties (kafka-* CLI tools, cp-ansible health checks) always uses provider file: the tools do not
 # run with the environment of the service.
@@ -60,7 +60,11 @@ iac_secrets_dir: "{{ lookup('ansible.builtin.env', 'IAC_SECRETS_DIR', default=in
 iac_config_secrets_enabled: true
 iac_config_secrets_provider: env
 iac_config_secrets_env_prefix: CP_SECRET_
-iac_config_secrets_dir: /var/ssl/private/iac-secrets
+iac_config_secrets_dir: "{{ rootless_deployment_path }}/secrets"
+# Owner of the secret directory and of the environment files: in a rootless deployment the deploy user, whose
+# systemd --user manager reads the EnvironmentFile; otherwise root (the system manager reads it).
+iac_config_secrets_owner: "{{ deployment_user if rootless_enabled | bool else 'root' }}"
+iac_config_secrets_group: "{{ deployment_group if rootless_enabled | bool else 'root' }}"
 iac_config_secrets_key_patterns:
   - '.*password.*'
   - '.*basic.auth.user.info.*'
@@ -75,12 +79,19 @@ regenerate_masterkey: false
 # ---- TLS -------------------------------------------------------------------
 # Host certificates are issued by the corporate CA and placed on the hosts BEFORE the run
 # (ssl_custom_certs_remote_src: true means the paths below are paths on the target hosts).
+# iac_host_certs_dir belongs to the deploy user (host bootstrap), which reads the files; cp-ansible builds the
+# keystores from them below ssl_file_dir (<rootless_deployment_path>/ssl).
+#   ca-bundle.crt              CA chain: issuing (intermediate) CA and root CA, PEM
+#   <inventory_hostname>.crt   host certificate, PEM; SAN with the host name; EKU serverAuth (no listener
+#                              requires client certificates, so clientAuth is not needed)
+#   <inventory_hostname>.key   private key, PEM, readable by the deploy user only (0600)
+iac_host_certs_dir: "{{ rootless_deployment_path }}/certs"
 ssl_enabled: true
 ssl_custom_certs: true
 ssl_custom_certs_remote_src: true
-ssl_ca_cert_filepath: /var/ssl/private/ca-bundle.crt
-ssl_signed_cert_filepath: "/var/ssl/private/{{ inventory_hostname }}.crt"
-ssl_key_filepath: "/var/ssl/private/{{ inventory_hostname }}.key"
+ssl_ca_cert_filepath: "{{ iac_host_certs_dir }}/ca-bundle.crt"
+ssl_signed_cert_filepath: "{{ iac_host_certs_dir }}/{{ inventory_hostname }}.crt"
+ssl_key_filepath: "{{ iac_host_certs_dir }}/{{ inventory_hostname }}.key"
 # ssl_key_password: "{{ vault_ssl_key_password }}"     # only if the private keys are encrypted
 
 # ---- Kerberos (inter-broker and KRaft) ------------------------------------------
