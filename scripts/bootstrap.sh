@@ -7,6 +7,8 @@
 #
 # Air-gapped network: point pip to the Nexus PyPI proxy (PIP_INDEX_URL). Collections are downloaded from
 # the URLs in collections/requirements.yml; nothing is resolved from public Galaxy (--no-deps).
+# IAC_COLLECTIONS_REQUIREMENTS points to another requirements file with the SAME pinned versions, for a control
+# node that reaches the collections elsewhere (e.g. Galaxy names on a machine with internet access).
 # Set BOOTSTRAP_VENV=false to use an existing Python environment (e.g. a prepared runner image).
 # ansible-core 2.18 needs Python >= 3.11 on the control node; on RHEL 9 use e.g. PYTHON=python3.12.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -32,8 +34,10 @@ if [[ "$collections_only" == false ]]; then
 fi
 
 activate_venv
-log "installing pinned collections into ./collections"
-ansible-galaxy collection install -r collections/requirements.yml -p collections --no-deps
+requirements="${IAC_COLLECTIONS_REQUIREMENTS:-collections/requirements.yml}"
+[[ -f "$requirements" ]] || die "collection requirements file '$requirements' not found"
+log "installing pinned collections into ./collections ($requirements)"
+ansible-galaxy collection install -r "$requirements" -p collections --no-deps
 installed="$(ansible-galaxy collection list -p collections 2>/dev/null)"
 for collection in confluent.platform ansible.posix community.general; do
   grep -q "^$collection " <<<"$installed" || die "collection $collection is missing"

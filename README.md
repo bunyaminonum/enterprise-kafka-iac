@@ -219,6 +219,10 @@ scripts/bootstrap.sh --dev      # .venv, Python requirements, linters and the pi
 scripts/validate.sh             # lint, variable names, syntax, preflight (static) and rendering of all environments
 ```
 
+On RHEL 9 run it with `PYTHON=python3.12`. A control node that gets the collections from somewhere else than the
+Nexus raw repository (e.g. Ansible Galaxy) sets `IAC_COLLECTIONS_REQUIREMENTS` to a requirements file with the same
+pinned versions.
+
 ### Secrets
 
 - **No secret in git, no Ansible Vault.** Every secret is an environment variable of the process that runs
