@@ -25,8 +25,7 @@ kafka_broker_custom_properties:
   # Confluent Server license. Registered as a required secret for the prod tier; empty elsewhere (trial mode).
   confluent.license: "{{ vault_confluent_license | default('') }}"
 
-# Kernel tuning of the broker hosts. A rootless deployment cannot change kernel settings: the host bootstrap applies
-# these values (sysctl, as root) and validate_hosts checks them on every broker.
+# Kernel tuning of the broker hosts. cp-ansible applies these values itself (sysctl, as root).
 kafka_broker_sysctl:
   vm.swappiness: 1
   vm.dirty_background_ratio: 5

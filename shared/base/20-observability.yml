@@ -3,7 +3,8 @@
 # Prometheus JMX exporter agent on every component (collection default version 1.0.1).
 jmxexporter_enabled: true
 jmxexporter_version: "1.0.1"
-jmxexporter_jar_url: "{{ iac_nexus_url }}/maven-proxy/io/prometheus/jmx/jmx_prometheus_javaagent/{{ jmxexporter_version }}/jmx_prometheus_javaagent-{{ jmxexporter_version }}.jar"
+# Downloaded by every host from the same raw repository as the Confluent archives (00-platform.yml).
+jmxexporter_jar_url: "{{ iac_artifact_url }}/jmx_prometheus_javaagent-{{ jmxexporter_version }}.jar"
 
 # Scrape ports, pinned explicitly (these are the upstream defaults) so that firewall rules and the
 # Prometheus configuration have one reference that does not move with collection upgrades.

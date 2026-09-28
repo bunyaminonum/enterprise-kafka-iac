@@ -42,6 +42,9 @@ collection is upgraded.
 
 ## Rootless deployment (cp-ansible >= 8.3.2)
 
+Not used any more: THY grants root on the managed hosts, so this repository installs with `ansible_become: true`
+(`rootless_enabled: false`). The notes below explain what the mode would change.
+
 - `rootless_enabled: true` skips every task that needs root (`when: not (rootless_enabled | bool)`; tags
   `privileged`, `package`, `systemd`, `sysctl`, `logrotate`) and generates `systemd --user` units instead:
   `~/.config/systemd/user/cp-<component>.service` with `Restart=on-failure` and

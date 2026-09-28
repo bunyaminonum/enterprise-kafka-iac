@@ -13,53 +13,49 @@ iac_cp_ansible_version: "8.3.2"
 confluent_package_version: "8.3.1"
 # The collection defaults to 2.2.0. Pin the Control Center Next Gen release validated for CP 8.3.
 confluent_control_center_next_gen_package_version: "2.5.0"   # TODO(OD-09): confirm against the package mirror
+# Confluent CLI on every host (RBAC and secret operations). Pinned: its archive name is derived from it.
+confluent_cli_version: "4.72.0"
 
-# ---- Installation: rootless (Ansible gets no sudo) ---------------------------
-# Ansible never escalates privileges on the hosts. A sudoers file that allows single commands does not help:
-# Ansible runs its modules as temporary scripts, so its privilege escalation must be general ("Privilege
-# escalation must be general", Ansible documentation). cp-ansible's rootless mode (>= 8.3.2) installs and runs
-# Confluent Platform as ONE unprivileged deploy user instead:
-#   - Ansible connects as the deploy user (ansible_user, below) and never uses become
-#   - the tarballs are unpacked below rootless_deployment_path (installation_method archive, no RPMs)
-#   - every component runs as a systemd --user unit of the deploy user: cp-<component>.service
-#     (as the deploy user: XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user status 'cp-*')
-# Root is needed ONCE per host before the first run (README, "Host bootstrap"): the user and group, the
-# directories of this baseline, loginctl enable-linger (units start at boot without a login), Java and the
-# kernel settings (kafka_broker_sysctl). cp-ansible skips its root-only tasks by itself; validate_hosts checks
-# that the bootstrap was done.
-rootless_enabled: true
-installation_method: archive
-confluent_server_enabled: true
-deployment_user: cp-kafka
-deployment_group: confluent
-# Binaries, configuration, keystores, secret files and the systemd environment files of the components.
-# Size (CP 8.3.1): 1.8 GB per host, 3.5 GB on the Control Center host (archives are unpacked, not kept).
-rootless_deployment_path: /opt/confluent-platform
-# Directory layout of every host. The host bootstrap creates rootless_deployment_path, iac_data_dir and iac_log_dir
-# and gives them to the deploy user (who cannot create directories in /opt, / or /var/log); the components
-# create their own subdirectories below them.
+# ---- Installation: Confluent archives, root on the hosts ---------------------
+# Ansible connects as the automation account of the environment (command line: the SSH user of the run, Tower:
+# the machine credential) and becomes root on the managed hosts (ansible_become, below). Ansible needs GENERAL
+# privilege escalation: it runs its modules as temporary scripts ("Privilege escalation must be general", Ansible
+# documentation), a sudoers file that allows single commands is not enough. As root, cp-ansible
+#   - creates the group confluent and one service account per component (cp-kafka, cp-schema-registry,
+#     cp-kafka-connect, cp-kafka-rest, cp-control-center),
+#   - unpacks the Confluent archive below archive_destination_path (no RPM repository: the hosts download the
+#     tarballs, see "Artifact sources" below),
+#   - writes the system units (confluent-kcontroller, confluent-server, confluent-schema-registry,
+#     confluent-kafka-connect, confluent-kafka-rest, confluent-control-center) and applies kafka_broker_sysctl.
+# Layout on every host (cp-ansible creates the directories and gives them to the service accounts):
+#   /opt/confluent/confluent-<version>   binaries (archive_destination_path)
+#   /opt/confluent/etc/<component>       configuration
+#   /var/ssl/private                     host certificates (placed by the OS team) and keystores
 #   iac_data_dir   data disk: <iac_data_dir>/controller (KRaft metadata), /broker (Kafka data),
 #                  /control-center (Control Center Next Gen and its Prometheus)
 #   iac_log_dir    log disk: one subdirectory per component (shared/base/20-observability.yml)
+# Size (CP 8.3.1): 1.8 GB per host, 3.5 GB on the Control Center host (archives are unpacked, not kept).
+# (rootless_enabled: true would install and run everything as ONE unprivileged user without sudo; not used.)
+installation_method: archive
+confluent_server_enabled: true
+archive_destination_path: /opt/confluent
 iac_data_dir: /kafka/data
 iac_log_dir: /var/log/kafka
 
-# ---- Air-gapped package sources ---------------------------------------------
-# Every download goes through Nexus. The "confluent-packages" repository must proxy or mirror
-# https://packages.confluent.io with the SAME layout, because cp-ansible appends
-# /rpm/<version>, /clients/rpm/..., /confluent-control-center-next-gen/rpm/... to these URLs.
+# ---- Artifact sources ---------------------------------------------------------
+# Every download goes through Nexus. The hosts download the four archives themselves (the *_remote defaults of
+# cp-ansible stay true), so every host needs HTTPS to iac_artifact_url and trusts its CA. The raw repository
+# holds the files under exactly these names; the Confluent CLI is published upstream only without its version in
+# the file name, so it is uploaded under the versioned name.
 iac_nexus_url: "https://nexus.internal.net/repository"
-confluent_common_repository_baseurl: "{{ iac_nexus_url }}/confluent-packages"
-confluent_clients_repository_baseurl: "{{ iac_nexus_url }}/confluent-packages"
-confluent_independent_repository_baseurl: "{{ iac_nexus_url }}/confluent-packages"
-# Collection default is a public AWS S3 bucket. cp-ansible installs the Confluent CLI on every host
-# (confluent_cli_download_enabled, upstream default); it is used for RBAC and secret operations.
-confluent_cli_repository_baseurl: "{{ iac_nexus_url }}/confluent-cli"
+iac_artifact_url: "{{ iac_nexus_url }}/confluent-archives"
+confluent_archive_file_source: "{{ iac_artifact_url }}/confluent-{{ confluent_package_version }}.tar.gz"
+confluent_archive_control_center_next_gen_file_source: "{{ iac_artifact_url }}/confluent-control-center-next-gen-{{ confluent_control_center_next_gen_package_version }}.tar.gz"
+confluent_cli_archive_file_source: "{{ iac_artifact_url }}/confluent_{{ confluent_cli_version }}_linux_amd64.tar.gz"
 
 # ---- Java --------------------------------------------------------------------
-# Java 21 is installed by the host bootstrap (java-21-openjdk-headless): a rootless run cannot install packages.
-# custom_java_path turns the collection's Java installation off and becomes JAVA_HOME of every component.
-# keytool (same package) must be on the PATH of the deploy user; validate_hosts checks both.
+# Java 21 is installed by the OS team (java-21-openjdk-headless). custom_java_path turns the collection's Java
+# installation off and becomes JAVA_HOME of every component.
 custom_java_path: /usr/lib/jvm/jre-21-openjdk
 
 # JVM options of Confluent's production guidance, shared by all JVM components (heap sizes come from the tiers).
@@ -69,10 +65,11 @@ iac_jvm_g1_opts: >-
   -XX:MinMetaspaceFreeRatio=50 -XX:MaxMetaspaceFreeRatio=80
 
 # ---- Execution behaviour -----------------------------------------------------
-# Ansible connects as the deploy user (the owner of the systemd --user units) and never escalates. Tasks
-# delegated to the control node run as the user of the ansible-playbook process.
-ansible_user: "{{ deployment_user }}"
-ansible_become: false
+# Privilege escalation for the managed hosts only (not set globally in ansible.cfg, so that tasks
+# delegated to the control node do not need sudo there). The SSH user is not set here: it is the automation
+# account of the environment (command line: the user of the run or ansible_user in hosts.yml, Tower: the machine
+# credential).
+ansible_become: true
 # rolling = serial provisioning (one host at a time) for hosts whose service is already running;
 # cp-ansible always provisions not-yet-running (greenfield) hosts in parallel. This only works through the
 # upstream playbooks (playbooks/site.yml imports confluent.platform.all).

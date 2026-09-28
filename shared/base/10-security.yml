@@ -63,9 +63,9 @@ iac_secrets_dir: "{{ lookup('ansible.builtin.env', 'IAC_SECRETS_DIR', default=pl
 iac_config_secrets_enabled: true
 iac_config_secrets_provider: env
 iac_config_secrets_env_prefix: CP_SECRET_
-iac_config_secrets_dir: "{{ rootless_deployment_path }}/secrets"
-# Owner of the secret directory and of the environment files: in a rootless deployment the deploy user, whose
-# systemd --user manager reads the EnvironmentFile; otherwise root (the system manager reads it).
+iac_config_secrets_dir: /var/ssl/private/iac-secrets
+# Owner of the secret directory and of the environment files: root, because systemd (the system manager) reads the
+# EnvironmentFile before it starts the service as its service account. A rootless deployment would use the deploy user.
 iac_config_secrets_owner: "{{ deployment_user if rootless_enabled | bool else 'root' }}"
 iac_config_secrets_group: "{{ deployment_group if rootless_enabled | bool else 'root' }}"
 iac_config_secrets_key_patterns:
@@ -82,13 +82,13 @@ regenerate_masterkey: false
 # ---- TLS -------------------------------------------------------------------
 # Host certificates are issued by the corporate CA and placed on the hosts BEFORE the run
 # (ssl_custom_certs_remote_src: true means the paths below are paths on the target hosts).
-# iac_host_certs_dir belongs to the deploy user (host bootstrap), which reads the files; cp-ansible builds the
-# keystores from them below ssl_file_dir (<rootless_deployment_path>/ssl).
+# The OS team places them in iac_host_certs_dir (root); cp-ansible reads them as root and builds the keystores of
+# every component below ssl_file_dir (cp-ansible default /var/ssl/private).
 #   ca-bundle.crt              CA chain: issuing (intermediate) CA and root CA, PEM
 #   <inventory_hostname>.crt   host certificate, PEM; SAN with the host name; EKU serverAuth (no listener
 #                              requires client certificates, so clientAuth is not needed)
-#   <inventory_hostname>.key   private key, PEM, readable by the deploy user only (0600)
-iac_host_certs_dir: "{{ rootless_deployment_path }}/certs"
+#   <inventory_hostname>.key   private key, PEM, readable by root only (0600)
+iac_host_certs_dir: /var/ssl/private
 ssl_enabled: true
 ssl_custom_certs: true
 ssl_custom_certs_remote_src: true

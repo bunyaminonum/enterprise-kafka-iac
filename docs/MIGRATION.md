@@ -56,7 +56,7 @@ This document describes what changed compared with the first version of this rep
 
 ## Behaviour changes to be aware of
 
-- Installation method is `package` (internal mirror of packages.confluent.io) instead of `archive`
+- Installation method is `archive` (Confluent tarballs from a raw Nexus repository, downloaded by the hosts) with root on the hosts; `package` (RPMs) is the alternative
   (the archive variant is kept as a comment in `shared/base/00-platform.yml`).
 - Nonprod clusters replicate with RF 3 instead of 1.
 - The prod-tier broker heap is 6 GB (Confluent production guidance) instead of 16 GB; other heaps keep the

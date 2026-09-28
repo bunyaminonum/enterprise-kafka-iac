@@ -165,43 +165,33 @@ below 3 / `min.insync.replicas=2` in any environment; stretched clusters use 4 (
   ansible-core 2.18; on RHEL 9 install `python3.12` and run `PYTHON=python3.12 scripts/bootstrap.sh`).
 - Git with symlink support. On Windows use WSL or `git config core.symlinks true`; without it the layer links
   are checked out as plain files and preflight stops.
-- Access to Nexus: PyPI proxy, a raw repository with the collection tarballs, a mirror/proxy of
-  `https://packages.confluent.io` and of the Confluent CLI (see `shared/base/00-platform.yml`).
-- SSH access to the managed hosts **as the deploy user** (`cp-kafka`, key-based), their host keys in
-  `known_hosts`. Ansible never uses `sudo` there (rootless deployment); an administrator bootstraps every host
-  once (below).
+- Access to Nexus: PyPI proxy, a raw repository with the collection tarballs and a raw repository with the
+  Confluent archives (`iac_artifact_url`, see `shared/base/00-platform.yml`).
+- SSH access to the managed hosts as the automation account of the environment (key-based), their host keys in
+  `known_hosts`, and **general** privilege escalation for that account (passwordless `sudo`, or the become
+  password in the Tower machine credential). A sudoers file that allows single commands is not enough: Ansible
+  runs its modules as temporary scripts ("Privilege escalation must be general", Ansible documentation).
 
-### Host bootstrap (root, once per host)
+### Host prerequisites (once per host)
 
-cp-ansible installs and runs Confluent Platform as one unprivileged deploy user (`rootless_enabled`,
-`shared/base/00-platform.yml`): the tarballs are unpacked below `rootless_deployment_path`, and every component
-is a `systemd --user` unit of that user (`cp-<component>.service`). Ansible cannot work with a sudoers file that
-allows single commands ("Privilege escalation must be general", Ansible documentation), so it gets no sudo at
-all. What needs root is done once per host by an administrator, with the values of `00-platform.yml`:
+With root, cp-ansible creates the service accounts (`cp-kafka`, `cp-schema-registry`, ...), the directories, the
+system units (`confluent-server`, `confluent-kcontroller`, ...) and applies the kernel settings itself. What the
+OS team provides before the first run:
 
-```bash
-groupadd confluent
-useradd -m -g confluent -s /bin/bash cp-kafka                  # deploy user: SSH login for Ansible, owner of every process
-install -d -m 700 -o cp-kafka -g confluent /home/cp-kafka/.ssh
-install -m 600 -o cp-kafka -g confluent <automation public key> /home/cp-kafka/.ssh/authorized_keys
-install -d -m 750 -o cp-kafka -g confluent /opt/confluent-platform /opt/confluent-platform/certs /kafka/data /var/log/kafka
-loginctl enable-linger cp-kafka                                # user units start at boot without a login
-dnf install -y java-21-openjdk-headless openssl tar python3-pyyaml
-printf '%s\n' 'vm.swappiness = 1' 'vm.dirty_background_ratio = 5' 'vm.dirty_ratio = 80' 'vm.max_map_count = 262144' \
-  > /etc/sysctl.d/90-kafka.conf
-sysctl --system
-```
-
-Then place the host certificate files in `/opt/confluent-platform/certs/` (owner `cp-kafka`, key `0600`; see
-`shared/base/10-security.yml`, TLS) and check the host with the deploy user's SSH key:
+- the automation account with its SSH key and general `sudo` (above);
+- Java 21 (`java-21-openjdk-headless`, `custom_java_path` in `shared/base/00-platform.yml`);
+- the host certificate files in `/var/ssl/private/` (root, key `0600`; see `shared/base/10-security.yml`, TLS);
+- the data and log disks mounted at `/kafka/data` and `/var/log/kafka` (`iac_data_dir`, `iac_log_dir`);
+- access to the RHEL repositories (cp-ansible installs `python3-pip` and a few packages) and HTTPS to the raw
+  repository of the Confluent archives. Hosts without PyPI access: `--skip-tags pip-package` (then
+  `python3-cryptography` must be installed; cp-ansible otherwise runs `pip install --upgrade pip`).
 
 ```bash
-scripts/run.sh <environment> validate_hosts     # deploy user, linger, no sudo, directories, certificates, Java, sysctl
+scripts/run.sh <environment> validate_hosts     # OS, disk, memory; read-only
 ```
 
-Not needed any more: service accounts per component, package repositories, systemd units under
-`/usr/lib/systemd/system`, `/etc/kafka` and the other `/etc` directories, `/var/ssl/private`, Kerberos. The
-components run with 524288 open files (hard limit of the user manager; the JVM raises its soft limit).
+(`rootless_enabled: true` would install and run everything as one unprivileged user without sudo; the checks of
+that mode stay in `playbooks/validate_hosts.yml` and `playbooks/preflight.yml`, they are skipped otherwise.)
 
 ### Publish the collections to Nexus (once per version)
 
@@ -248,10 +238,10 @@ pinned versions. Tower needs no bootstrap: see [Running from Tower](#running-fro
   password-like value cp-ansible would write into `server.properties` and its siblings out of the file:
   - service configuration: `${env:CP_SECRET_<KEY>}`, resolved by Kafka's `EnvVarConfigProvider`
     (`allowlist.pattern ^CP_SECRET_.*`). Each service gets a systemd `EnvironmentFile`
-    `/opt/confluent-platform/secrets/<component>.env` (deploy user, `0600`); `systemctl show` lists only its path.
+    `/var/ssl/private/iac-secrets/<component>.env` (root, `0600`); `systemctl show` lists only its path.
   - `client.properties` of brokers and controllers (kafka-* CLI tools, cp-ansible health checks, which do not run
-    with the service environment): `${file:/opt/confluent-platform/secrets/<component>_client.properties:<key>}`
-    (deploy user, `0400`).
+    with the service environment): `${file:/var/ssl/private/iac-secrets/<component>_client.properties:<key>}`
+    (service account, `0400`).
 
   The selected keys are the ones Confluent Secret Protection encrypts, so the coverage is the same without a
   master key (`docs/UPSTREAM-NOTES.md`). `iac_config_secrets_provider: file` switches the services to
@@ -266,7 +256,7 @@ pinned versions. Tower needs no bootstrap: see [Running from Tower](#running-fro
 - **Control node secret files.** Files cp-ansible would read on the control node go into `$IAC_SECRETS_DIR`
   (default `.secrets/<environment>`, git-ignored). None is needed at the moment.
 - **Host TLS certificates are expected on the hosts** (`ssl_custom_certs_remote_src: true`,
-  `/opt/confluent-platform/certs/`: `ca-bundle.crt`, `<inventory_hostname>.crt`, `<inventory_hostname>.key`).
+  `/var/ssl/private/`: `ca-bundle.crt`, `<inventory_hostname>.crt`, `<inventory_hostname>.key`).
   The identity provider CA certificate (`iac_control_node_ca_cert`) is read from the control node.
 
 ### Small non-production environments (three hosts)
@@ -289,7 +279,7 @@ command line control node comes from controller objects:
 | `scripts/bootstrap.sh`: ansible-core 2.18, bcrypt, pinned collections | Execution environment built from `execution-environment.yml`; the project sync installs `collections/requirements.yml` |
 | `scripts/run.sh <environment> <playbook>` | Job template: inventory `<environment>`, playbook `playbooks/<playbook>.yml`; every changing playbook imports `preflight.yml` |
 | `IAC_SECRET_*` from `~/.secrets/<environment>.env` | Credential of the type "Kafka IaC" (`tower/credential-type-kafka-iac.yml`), one per environment |
-| SSH key of the deploy user | Machine credential: user `cp-kafka`, its private key, no privilege escalation |
+| SSH key and sudo of the automation account | Machine credential: user, private key, privilege escalation method `sudo` (and its password unless sudo is passwordless) |
 | `CONFIRM_ENV=<environment>` | Survey question `confirm_env` on the job templates of protected environments |
 | `PLAYBOOK_TAGS`, `PLAYBOOK_LIMIT`, further `-e` | Job tags, skip tags, limit and extra variables of the job template (or prompted on launch) |
 | `AUTO_SUPPORT_BUNDLE` | Off (`support_bundle_auto_collect_on_failure: false`): the bundle would stay in the job's container |
@@ -306,8 +296,8 @@ command line control node comes from controller objects:
    `collections/requirements.yml` (it never contacts the Galaxy server, the entries are URLs).
 3. **Credential type** "Kafka IaC" from `tower/credential-type-kafka-iac.yml` and one credential per environment.
    The controller does not accept `ANSIBLE_*` variables in credentials; the execution environment sets `ANSIBLE_CONFIG`.
-4. **Machine credential**: user `cp-kafka`, the SSH private key the host bootstrap authorized, privilege escalation
-   empty (`ansible_become: false` in `shared/base/00-platform.yml` wins over the job template anyway).
+4. **Machine credential**: the automation account, its SSH private key, privilege escalation method `sudo`
+   (`ansible_become: true` in `shared/base/00-platform.yml` makes every task escalate on the managed hosts).
 5. **Inventory** per environment with one source "Sourced from a Project": project above, inventory file
    `environments/<environment>` or `environments/<environment>/hosts.yml` (same result: the `group_vars` next to
    it are read), execution environment `kafka-iac`, options "Overwrite", "Overwrite variables" and "Update on
@@ -354,13 +344,11 @@ inherits the environment. When a run fails, that callback collects a support bun
 with `AUTO_SUPPORT_BUNDLE=false`. `run.sh` executes the guard rails first in a separate process without that
 callback, so a refused run never starts collecting diagnostics from the hosts.
 
-On the hosts every component is a `systemd --user` unit of the deploy user:
+On the hosts every component is a system unit that runs as its service account:
 
 ```bash
-ssh cp-kafka@<host>
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
-systemctl --user status 'cp-*'                 # cp-kafka_controller, cp-kafka_broker, cp-schema_registry, ...
-journalctl --user -u cp-kafka_broker           # plus the log files below /var/log/kafka/<component>
+sudo systemctl status 'confluent-*'            # confluent-kcontroller, confluent-server, confluent-schema-registry, ...
+sudo journalctl -u confluent-server            # plus the log files below /var/log/kafka/<component>
 ```
 
 `deployment_strategy: rolling` provisions running hosts one at a time through the upstream playbooks.
@@ -409,7 +397,7 @@ scripts/new-env.sh perf nonprod single-site perf.internal.net
 | A value for one data center | `environments/<env>/group_vars/site_<code>.yml` |
 | A value for one server | `environments/<env>/host_vars/<host>.yml` |
 | A new secret | `vault_<name>` in `shared/base/15-secrets.yml` (env lookup) + entry in `iac_required_secrets` + `secrets.env.example` |
-| Corporate CA rotation | new files on the hosts (`/opt/confluent-platform/certs/`) and on the runners (`iac_control_node_ca_cert`), then `site` |
+| Corporate CA rotation | new files on the hosts (`/var/ssl/private/`) and on the runners (`iac_control_node_ca_cert`), then `site` |
 | Package, Java or collection versions | `shared/base/00-platform.yml`, `collections/requirements.yml` |
 | Deploy user, installation, data or log directory | `shared/base/00-platform.yml` (and the host bootstrap) |
 
@@ -419,19 +407,18 @@ scripts/new-env.sh perf nonprod single-site perf.internal.net
 
 - `hash_behaviour` is `merge` and the installed collection equals `iac_cp_ansible_version`;
 - protected environments (`preprod`, `production`, `dr`) require `-e confirm_env=<environment>`;
-- every host belongs to `env_<environment>`, the inventory directory matches `iac_env`, all layers are loaded;
+- every host belongs to `env_<environment>` (the group of `hosts.yml` matches `iac_env`), all layers are loaded and merged key by key;
 - KRaft: odd number (≥ 3) of dedicated controllers, pinned and unique `node_id`, enough brokers for the
   internal replication factor (with `iac_kraft_colocated`: co-location allowed, `node_id` unset, non-production only);
 - topology: stretched hosts belong to exactly one site, both sites host controllers, `broker.rack` matches
   the site; single-site environments have no site groups;
-- rootless: archive installation, deploy user and path set, cp-ansible >= 8.3.2, every host connects as the
-  deploy user without `become`;
+- only with `rootless_enabled` (not used): archive installation, deploy user and path set, cp-ansible >= 8.3.2,
+  every host connects as the deploy user without `become`;
 - deploy mode: registered secrets are set, the MDS super user password is not the upstream default, the SCRAM
   and PLAIN passwords are letters and digits, secret masking is on in protected environments.
 
-`playbooks/validate_hosts.yml` (connects to the hosts, read-only) checks the host bootstrap: deploy user, linger,
-no passwordless sudo, directories owned by the deploy user, certificate files, Java, keytool, openssl, PyYAML
-and the kernel settings of the brokers.
+`playbooks/validate_hosts.yml` (connects to the hosts, read-only) runs the host checks of cp-ansible: OS version,
+`/tmp`, disk and memory. With `rootless_enabled` it additionally checks the host bootstrap of that mode.
 
 `scripts/validate.sh` adds linting, the variable-name check, syntax checks and rendering for every environment.
 
