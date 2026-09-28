@@ -22,11 +22,12 @@ Control Center Next Gen) can be overridden per environment, per data center and 
 2. [Environments](#environments)
 3. [Repository layout](#repository-layout)
 4. [Getting started](#getting-started)
-5. [Day-to-day operations](#day-to-day-operations)
-6. [Where does a change go?](#where-does-a-change-go)
-7. [Guard rails](#guard-rails)
-8. [CI/CD](#cicd)
-9. [Upgrading cp-ansible](#upgrading-cp-ansible)
+5. [Running from Tower](#running-from-tower)
+6. [Day-to-day operations](#day-to-day-operations)
+7. [Where does a change go?](#where-does-a-change-go)
+8. [Guard rails](#guard-rails)
+9. [CI/CD](#cicd)
+10. [Upgrading cp-ansible](#upgrading-cp-ansible)
 
 ---
 
@@ -120,6 +121,8 @@ below 3 / `min.insync.replicas=2` in any environment; stretched clusters use 4 (
 ├── requirements.txt                 # control node Python dependencies (ansible-core 2.18)
 ├── requirements-dev.txt             # + yamllint, ansible-lint (pinned)
 ├── collections/requirements.yml     # pinned confluent.platform 8.3.2 (+ ansible.posix, community.general)
+├── execution-environment.yml        # Tower: execution environment image (ansible-builder)
+├── tower/                           # Tower: credential type of the IAC_SECRET_* variables
 ├── shared/
 │   ├── base/                        # layer 1: platform, security, observability, one file per component
 │   ├── tiers/{nonprod,prod}/        # layer 2a: heaps, retention, license requirement
@@ -143,7 +146,7 @@ below 3 / `min.insync.replicas=2` in any environment; stretched clusters use 4 (
 │   └── tasks/, files/               # helpers
 ├── scripts/
 │   ├── bootstrap.sh                 # virtualenv + pinned collections
-│   ├── run.sh                       # the only way to run a playbook against an environment
+│   ├── run.sh                       # command line runs of a playbook against an environment (Tower: job templates)
 │   ├── validate.sh                  # static validation (CI)
 │   ├── render-config.sh             # effective configuration -> build/rendered
 │   ├── config-diff.sh               # "plan": effective configuration diff between two revisions
@@ -221,7 +224,7 @@ scripts/validate.sh             # lint, variable names, syntax, preflight (stati
 
 On RHEL 9 run it with `PYTHON=python3.12`. A control node that gets the collections from somewhere else than the
 Nexus raw repository (e.g. Ansible Galaxy) sets `IAC_COLLECTIONS_REQUIREMENTS` to a requirements file with the same
-pinned versions.
+pinned versions. Tower needs no bootstrap: see [Running from Tower](#running-from-tower).
 
 ### Secrets
 
@@ -235,7 +238,8 @@ pinned versions.
   set -a; . ~/.secrets/dev100.env; set +a                                                     # in the shell of the run
   ```
 
-  In AWX/Tower a custom credential type per environment injects the same variables (see "AWX / Tower").
+  In Tower a credential of the type "Kafka IaC" per environment injects the same variables
+  (`tower/credential-type-kafka-iac.yml`, [Running from Tower](#running-from-tower)).
 - **Every secret is registered** in `iac_required_secrets` (`shared/base/10-security.yml`; the prod tier adds
   `vault_confluent_license`, `dr` adds `vault_password_encoder_secret`). Preflight refuses to deploy while a
   registered secret is empty and names the missing `IAC_SECRET_*` variable. Static validation and rendering
@@ -273,22 +277,64 @@ quorum voters follow). Preflight refuses the mode for the prod tier and protecte
 Center shares a host with a controller, move Alertmanager off the controller port:
 `control_center_next_gen_dependency_alertmanager_port: 9195`.
 
-### AWX / Tower
+## Running from Tower
 
-Run the same playbooks through `scripts/run.sh` (or `playbooks/<name>.yml` directly) from a job template per
-environment and operation:
+Tower (AAP automation controller, AWX) runs the playbooks of `playbooks/` directly; nothing in `scripts/` runs on
+the controller. The layers, the symlinks and the overrides are used unchanged: the controller copies the project with
+its symlinks and loads `environments/<environment>` with the `ansible.cfg` of the project. What the scripts do on a
+command line control node comes from controller objects:
 
-- **Project**: this repository (Bitbucket/Git), branch `main`; the inventory is `environments/<environment>`.
-- **Execution environment**: an image with ansible-core 2.18, Python 3.11+ and the pinned collections of
-  `collections/requirements.yml` (built with `ansible-builder`), so every run uses the same versions.
-- **Credentials**: a machine credential (SSH as the deploy user `cp-kafka`, no privilege escalation) and a
-  custom credential type "Kafka secrets" whose injector sets the `IAC_SECRET_*` environment variables; one
-  credential per environment.
-- **Surveys / extra vars**: `confirm_env` for protected environments, optional tags and limit.
+| Command line | Tower |
+|---|---|
+| `scripts/bootstrap.sh`: ansible-core 2.18, bcrypt, pinned collections | Execution environment built from `execution-environment.yml`; the project sync installs `collections/requirements.yml` |
+| `scripts/run.sh <environment> <playbook>` | Job template: inventory `<environment>`, playbook `playbooks/<playbook>.yml`; every changing playbook imports `preflight.yml` |
+| `IAC_SECRET_*` from `~/.secrets/<environment>.env` | Credential of the type "Kafka IaC" (`tower/credential-type-kafka-iac.yml`), one per environment |
+| SSH key of the deploy user | Machine credential: user `cp-kafka`, its private key, no privilege escalation |
+| `CONFIRM_ENV=<environment>` | Survey question `confirm_env` on the job templates of protected environments |
+| `PLAYBOOK_TAGS`, `PLAYBOOK_LIMIT`, further `-e` | Job tags, skip tags, limit and extra variables of the job template (or prompted on launch) |
+| `AUTO_SUPPORT_BUNDLE` | Off (`support_bundle_auto_collect_on_failure: false`): the bundle would stay in the job's container |
+| `SSH_KNOWN_HOSTS` | Controller setting `ANSIBLE_HOST_KEY_CHECKING` (controller default: `False`) |
+
+**Controller objects**
+
+1. **Execution environment** `kafka-iac`, built from `execution-environment.yml` (`ansible-builder build`): ansible-core
+   2.18 (the default images of AAP 2.5 and 2.6 carry 2.16, community.general 12 needs 2.18), bcrypt, the pinned
+   collections and `ANSIBLE_CONFIG=/runner/project/ansible.cfg` (Ansible ignores `./ansible.cfg` in a world writable
+   working directory, and with it `hash_behaviour = merge`).
+2. **Project**: this repository, branch `main`, execution environment `kafka-iac`, option "Update revision on launch".
+   The organization of the project needs a **Galaxy credential**: without one the project sync skips
+   `collections/requirements.yml` (it never contacts the Galaxy server, the entries are URLs).
+3. **Credential type** "Kafka IaC" from `tower/credential-type-kafka-iac.yml` and one credential per environment.
+   The controller does not accept `ANSIBLE_*` variables in credentials; the execution environment sets `ANSIBLE_CONFIG`.
+4. **Machine credential**: user `cp-kafka`, the SSH private key the host bootstrap authorized, privilege escalation
+   empty (`ansible_become: false` in `shared/base/00-platform.yml` wins over the job template anyway).
+5. **Inventory** per environment with one source "Sourced from a Project": project above, inventory file
+   `environments/<environment>` or `environments/<environment>/hosts.yml` (same result: the `group_vars` next to
+   it are read), execution environment `kafka-iac`, options "Overwrite", "Overwrite variables" and "Update on
+   launch". The sync stores the merged layers; preflight checks that the dictionaries were merged key by key.
+6. **Job templates** per environment, each with the inventory, both credentials and the execution environment above,
+   privilege escalation off:
+
+| Job template | Playbook | Settings |
+|---|---|---|
+| `<environment> - site` | `playbooks/site.yml` | installation and reconfiguration; prompt on launch: tags, limit |
+| `<environment> - write configuration` | `playbooks/site.yml` | skip tags `package`, extra variables `skip_restarts: true` |
+| `<environment> - restart` | `playbooks/restart.yml` | rolling restart; prompt on launch: tags, limit |
+| `<environment> - health check` | `playbooks/health_check.yml` | read-only, no confirmation |
+| `<environment> - validate hosts` | `playbooks/validate_hosts.yml` | read-only, before the first installation |
+| `<environment> - config secrets` | `playbooks/config_secrets.yml` | secret files only, restarts nothing |
+
+Protected environments (`iac_protected_envs`: `preprod`, `production`, `dr`) get a survey on `site`, `restart` and
+`config secrets`: one required text question with the answer variable `confirm_env`. Preflight refuses the run unless
+the answer equals the environment name.
+
+`playbooks/support_bundle.yml` and `playbooks/render_config.yml` write their results on the control node, which in
+Tower is the job's container: run them from a command line control node.
 
 ## Day-to-day operations
 
-All runs go through `scripts/run.sh <environment> <playbook> [ansible-playbook arguments]`.
+On a command line control node all runs go through `scripts/run.sh <environment> <playbook> [ansible-playbook
+arguments]`; Tower runs the same playbooks from job templates ([Running from Tower](#running-from-tower)).
 
 ```bash
 scripts/run.sh dev100 site                                   # deploy or reconfigure an environment
@@ -392,6 +438,8 @@ and the kernel settings of the brokers.
 ## CI/CD
 
 The pipelines are thin wrappers around `scripts/`, so GitHub Actions and Bitbucket Pipelines behave the same.
+Where environments are operated from Tower, only the validation jobs are used (they need no host and no secret); the
+deploy jobs are the command line alternative to the job templates.
 Both expect **self-hosted Linux runners inside the corporate network** (Nexus and host access) labelled
 `kafka-iac`. On an air-gapped GitHub Enterprise Server, make sure `actions/checkout` and
 `actions/upload-artifact` are available.
@@ -416,4 +464,6 @@ Control node secret files (none at the moment) would be fetched in a marked step
    (`shared/base/00-platform.yml`); preflight fails if they differ.
 3. Read the pull request's effective configuration diff: it shows, per host, every property the new
    collection version changes in every environment.
-4. Roll out environment by environment: `dev100` → `dev` → `test` → `qa` → `preprod` → `production` / `dr`.
+4. Tower: sync the project and rebuild the execution environment image (`execution-environment.yml` bakes the
+   collections of `collections/requirements.yml`).
+5. Roll out environment by environment: `dev100` → `dev` → `test` → `qa` → `preprod` → `production` / `dr`.

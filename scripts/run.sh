@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Single entry point for every playbook run against an environment (local shell and CI).
+# Tower job templates do not use it: they run playbooks/<playbook>.yml directly (README, "Running from Tower").
 #
 # Usage: scripts/run.sh <environment> <playbook> [additional ansible-playbook arguments]
 #   <playbook>  site | health_check | restart | validate_hosts | support_bundle | preflight | render_config

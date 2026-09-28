@@ -44,8 +44,9 @@ iac_required_secrets:
 # Files cp-ansible would read on the CONTROL NODE and copy to the hosts (e.g. the Secret Protection
 # security.properties). None is needed at the moment: no Kerberos keytabs (SCRAM/PLAIN), the host certificates
 # are placed on the hosts. The pipeline materialises such files into IAC_SECRETS_DIR before the run
-# (default: .secrets/<environment>, git-ignored).
-iac_secrets_dir: "{{ lookup('ansible.builtin.env', 'IAC_SECRETS_DIR', default=inventory_dir ~ '/../../.secrets/' ~ iac_env) }}"
+# (default: .secrets/<environment> in the repository root, git-ignored). The default is derived from playbook_dir,
+# not from inventory_dir: Tower hands the job a generated inventory outside the project.
+iac_secrets_dir: "{{ lookup('ansible.builtin.env', 'IAC_SECRETS_DIR', default=playbook_dir ~ '/../.secrets/' ~ iac_env) }}"
 
 # ---- Passwords in generated files ----------------------------------------------------
 # cp-ansible writes every password-like value (keystore passwords, JAAS configs, basic auth user info, LDAP

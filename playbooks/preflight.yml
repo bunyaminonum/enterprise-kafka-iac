@@ -8,6 +8,7 @@
 #   -e iac_static_validation=true     pull requests / CI: no vault password needed, secrets are
 #                                     replaced by placeholders, no confirmation required
 # Wrappers may pass iac_require_confirmation=false for read-only operations (health checks).
+# Every changing playbook imports this one, so a Tower job template runs it without any wrapper script.
 # =============================================================================
 - name: Preflight | guard rails
   hosts: all
@@ -28,7 +29,10 @@
         - name: Hash merging is enabled (cp-ansible requirement, basis of the layering model)
           ansible.builtin.assert:
             that: lookup('ansible.builtin.config', 'DEFAULT_HASH_BEHAVIOUR') == 'merge'
-            fail_msg: "hash_behaviour must be 'merge'. Run from the repository root (ansible.cfg) and do not set ANSIBLE_HASH_BEHAVIOUR."
+            fail_msg: >-
+              hash_behaviour must be 'merge'. Run from the repository root (ansible.cfg) and do not set ANSIBLE_HASH_BEHAVIOUR.
+              Tower: ansible.cfg was ignored; run the job template with the execution environment of
+              execution-environment.yml, which sets ANSIBLE_CONFIG=/runner/project/ansible.cfg.
             quiet: true
 
         - name: Installed confluent.platform collection matches iac_cp_ansible_version
@@ -39,7 +43,8 @@
             fail_msg: >-
               Pinned version {{ iac_cp_ansible_version }} but installed
               {{ iac_installed_version | default('nothing', true) }} ({{ iac_manifest | default('no MANIFEST.json', true) }}).
-              Run scripts/bootstrap.sh and keep collections/requirements.yml in sync.
+              Run scripts/bootstrap.sh and keep collections/requirements.yml in sync. Tower: sync the project again
+              (its organization needs a Galaxy credential, otherwise the sync skips collections/requirements.yml).
             quiet: true
           vars:
             iac_manifest: >-
@@ -55,7 +60,9 @@
         - name: Protected environments require an explicit confirmation
           ansible.builtin.assert:
             that: (confirm_env | default('')) == iac_env
-            fail_msg: "'{{ iac_env }}' is a protected environment. Re-run with -e confirm_env={{ iac_env }} (CI: confirmation input)."
+            fail_msg: >-
+              '{{ iac_env }}' is a protected environment. Re-run with -e confirm_env={{ iac_env }}
+              (CI: confirmation input, Tower: survey question confirm_env).
             quiet: true
           when:
             - iac_env in iac_protected_envs
@@ -79,6 +86,21 @@
             fail_msg: "All hosts of environments/{{ iac_env }} must be children of the group env_{{ iac_env }}."
             quiet: true
 
+        # The layers of group_vars/all (base, tier, topology, environment) are merged key by key only while the
+        # inventory is LOADED with hash_behaviour merge. Tower loads it once, at the inventory sync, and stores the
+        # result; an inventory synced without ansible.cfg keeps only the last layer of every dictionary.
+        - name: Inventory layers are merged key by key
+          ansible.builtin.assert:
+            that:
+              - "'ldap.java.naming.provider.url' in kafka_broker_custom_properties"
+              - "'log.dirs' in kafka_broker_custom_properties"
+            fail_msg: >-
+              kafka_broker_custom_properties lost the keys of shared/base/10-security.yml or 31-kafka-broker.yml:
+              the inventory was loaded without hash_behaviour merge. Tower: give the inventory source the execution
+              environment of execution-environment.yml or the source variable ANSIBLE_CONFIG: /runner/project/ansible.cfg,
+              and sync the inventory again.
+            quiet: true
+
         - name: Registered secrets are set (deploy mode)
           ansible.builtin.assert:
             that:
@@ -86,7 +108,7 @@
               - lookup('ansible.builtin.vars', item, default='') | string != 'CHANGE_ME'
             fail_msg: >-
               {{ item }} is empty or CHANGE_ME: export IAC_SECRET_{{ item | regex_replace('^vault_', '') | upper }}
-              for '{{ iac_env }}' (secrets.env.example, shared/base/15-secrets.yml)
+              for '{{ iac_env }}' (secrets.env.example, shared/base/15-secrets.yml; Tower: credential "Kafka IaC")
             quiet: true
           loop: "{{ iac_required_secrets | dict2items | selectattr('value') | map(attribute='key') | list }}"
           when: not (iac_static_validation | default(false) | bool)
@@ -142,17 +164,18 @@
         name: confluent.platform.variables
 
     # -------------------------------------------------------------- per-host checks
+    # Identity through the env_<environment> group of hosts.yml, not through inventory_dir: Tower hands the job a
+    # generated inventory outside the project (/runner/inventory).
     - name: Host belongs to this environment and all layers are loaded
       ansible.builtin.assert:
         that:
           - iac_env is defined
-          - inventory_dir | basename == iac_env
           - ('env_' ~ iac_env) in group_names
           - iac_tier is defined
           - iac_topology is defined
         fail_msg: >-
-          Inventory/identity mismatch or a missing layer symlink (00-base, 05-tier, 06-topology).
-          On Windows checkouts enable git symlinks (core.symlinks=true).
+          Inventory/identity mismatch (hosts.yml group env_<environment> against iac_env of 10-env.yml) or a missing
+          layer symlink (00-base, 05-tier, 06-topology). On Windows checkouts enable git symlinks (core.symlinks=true).
         quiet: true
 
     - name: Rootless - Ansible connects as the deploy user and never escalates

@@ -2,6 +2,14 @@
 # cp-ansible is consumed as-is (no fork). Only its version is pinned here.
 # Air-gapped: artifacts come from internal repositories; nothing is resolved from public Galaxy.
 #
+# Who installs this file:
+#   command line    scripts/bootstrap.sh -> ./collections (ansible-galaxy --no-deps)
+#   Tower           every project sync -> requirements_collections of the project, used before ./collections.
+#                   The sync skips this file unless the project's organization has a Galaxy credential (any
+#                   Galaxy/Automation Hub credential; the url entries below never contact it). It resolves
+#                   dependencies: confluent.platform needs ansible.posix, which the url entry below satisfies.
+#   EE image        execution-environment.yml bakes the same versions into the image (fallback).
+#
 # Upgrading cp-ansible is ONE pull request that changes:
 #   1. the collection version below
 #   2. iac_cp_ansible_version in shared/base/00-platform.yml   (preflight enforces that both match)

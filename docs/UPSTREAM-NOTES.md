@@ -164,6 +164,10 @@ collection is upgraded.
 - the switch `support_bundle_auto_collect_on_failure` is only read from CLI extra vars or variables written
   directly in the inventory file under `all.vars` — not from `group_vars/all` files. `scripts/run.sh`
   passes it as an extra var when `AUTO_SUPPORT_BUNDLE=false`.
+- Tower: the inventory sync stores `group_vars/all` as inventory variables and the job receives them as
+  `all.vars` of a generated inventory, so `support_bundle_auto_collect_on_failure: false` in
+  `shared/base/00-platform.yml` switches the callback off there (the bundle would stay in the job's container).
+  Tower passes extra variables as a file (`-e @...`), which the callback does not read.
 
 ## Execution
 

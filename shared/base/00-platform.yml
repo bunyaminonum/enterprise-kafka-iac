@@ -86,6 +86,12 @@ mask_sensitive_logs: true
 mask_sensitive_diff: true
 
 # ---- Support bundle ----------------------------------------------------------
-# The confluent.platform.support_bundle_on_failure callback re-runs playbooks/support_bundle.yml
-# when a run fails. IAC_SUPPORT_BUNDLE_DIR lets CI collect the bundle into its workspace.
+# The confluent.platform.support_bundle_on_failure callback (ansible.cfg) re-runs playbooks/support_bundle.yml
+# when a run fails. The callback reads its switch only from all.vars of the inventory and from -e key=value, never
+# from group_vars files (docs/UPSTREAM-NOTES.md). Tower stores group_vars/all as inventory variables and hands them
+# to the job as all.vars, so the value below switches the callback off in Tower only: there the bundle would be
+# written into the job's execution environment container and disappear with it. On the command line the callback
+# does not see this file and stays on (off: AUTO_SUPPORT_BUNDLE=false with scripts/run.sh).
+# IAC_SUPPORT_BUNDLE_DIR lets CI collect the bundle into its workspace.
+support_bundle_auto_collect_on_failure: false
 support_bundle_output_path: "{{ lookup('ansible.builtin.env', 'IAC_SUPPORT_BUNDLE_DIR', default='~/confluent-platform-support-bundles') }}"

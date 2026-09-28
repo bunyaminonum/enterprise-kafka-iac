@@ -1,0 +1,52 @@
+---
+# =============================================================================
+# Execution environment of the Tower job templates (ansible-builder v3).
+# Tower does not run scripts/bootstrap.sh; this image provides what bootstrap.sh installs on a command line control
+# node: the pinned ansible-core (requirements.txt), bcrypt and the pinned collections (collections/requirements.yml).
+#
+#   ansible-builder build -f execution-environment.yml -t <registry>/kafka-iac-ee:<version>
+#
+# Why a custom image:
+#   - ansible-core 2.18: the default images of AAP 2.5/2.6 carry ansible-core 2.16, but community.general 12.x
+#     requires ansible-core >= 2.18 (its meta/runtime.yml) and this repository is validated with 2.18.
+#   - bcrypt: cp-ansible hashes the Control Center Prometheus/Alertmanager basic auth passwords on the control node
+#     (filter confluent.platform.c3_generate_salt_and_hash).
+#   - collections: the project sync installs collections/requirements.yml as well and wins (it is earlier in
+#     ANSIBLE_COLLECTIONS_PATH); the baked copy covers an organization without a Galaxy credential. Preflight checks the
+#     version either way. Collections go to /usr/share/ansible/collections, outside sys.path (collections_scan_sys_path
+#     = False in ansible.cfg does not hide them).
+#   - ANSIBLE_CONFIG: Tower runs jobs and inventory syncs in /runner/project. Where that directory is world writable,
+#     Ansible ignores ./ansible.cfg (and with it hash_behaviour = merge). An explicit ANSIBLE_CONFIG is always read;
+#     it points to nothing in project syncs and other projects without ansible.cfg, which is harmless. Credentials
+#     cannot set it: Tower refuses ANSIBLE_* variables in credential injectors.
+# Keep ansible_core equal to requirements.txt and rebuild the image when collections/requirements.yml changes.
+# Air-gapped build host: pip and the collection URLs must reach the internal repositories (Nexus PyPI proxy).
+# =============================================================================
+version: 3
+
+images:
+  base_image:
+    # TODO: the ee-minimal-rhel9 image of the installed AAP version from the internal registry mirror
+    name: registry.redhat.io/ansible-automation-platform-25/ee-minimal-rhel9:latest
+
+dependencies:
+  # ansible-core 2.18 needs Python >= 3.11; /usr/bin/python3 of RHEL 9 based images is 3.9. The minimal images of
+  # AAP 2.5/2.6 (and quay.io/ansible/awx-ee) provide python3.12.
+  python_interpreter:
+    package_system: python3.12
+    python_path: /usr/bin/python3.12
+  ansible_core:
+    package_pip: ansible-core~=2.18.0
+  ansible_runner:
+    package_pip: ansible-runner
+  python:
+    - bcrypt
+  galaxy: collections/requirements.yml
+
+additional_build_steps:
+  append_final:
+    - ENV ANSIBLE_CONFIG=/runner/project/ansible.cfg
+
+options:
+  # The minimal images of AAP ship microdnf, not dnf. Another base image: --build-arg PKGMGR=/usr/bin/dnf
+  package_manager_path: /usr/bin/microdnf
