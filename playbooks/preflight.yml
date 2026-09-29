@@ -22,7 +22,7 @@
   tasks:
     - name: debug
       ansible.builtin.debug:
-      var: iac_static_validation
+        var: iac_static_validation
     - name: Replace registered secrets with placeholders (static validation)
       ansible.builtin.import_tasks: tasks/static_placeholders.yml
       when: iac_static_validation | default(false) | bool
