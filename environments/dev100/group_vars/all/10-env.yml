@@ -1,23 +1,24 @@
 ---
 # =============================================================================
-# LAYER 3 - ENVIRONMENT IDENTITY: dev100
-# Values that identify the environment and its endpoints. TODO: replace example values.
+# LAYER 3 - ENVIRONMENT IDENTITY: dev100 (lab)
+# Values that identify the environment and its endpoints.
 # =============================================================================
 iac_env: dev100
 
 # Cluster names (RBAC cluster registry, Control Center)
-kafka_broker_cluster_name: cp-lab
-schema_registry_cluster_name: cp-lab-schema-registry
-kafka_connect_cluster_name: cp-lab-connect
-kafka_connect_group_id: cp-lab-connect
+kafka_broker_cluster_name: cp-dev100
+schema_registry_cluster_name: cp-dev100-schema-registry
+kafka_connect_cluster_name: cp-dev100-connect
+kafka_connect_group_id: cp-dev100-connect
 
-# Directory services (Active Directory, LDAPS)
-iac_ldap_url: ldaps://ad.lab.local:636
-iac_ldap_bind_dn: "CN=ldap-bind-user,OU=ServiceAccounts,DC=lab,DC=local"
-iac_ldap_user_search_base: "OU=Users,DC=lab,DC=local"
-iac_ldap_group_search_base: "OU=Groups,DC=lab,DC=local"
+# Directory service: the lab OpenLDAP container on cp-node1 (plain LDAP; THY: ldaps://...:636)
+iac_ldap_url: ldap://cp-node1.lab.local:1389
+iac_ldap_bind_dn: "cn=ldap-bind-user,dc=lab,dc=local"
+iac_ldap_user_search_base: "ou=users,dc=lab,dc=local"
+iac_ldap_group_search_base: "ou=groups,dc=lab,dc=local"
 
-# Identity provider (OAuth). Client secrets come from IAC_SECRET_* variables (secrets.env.example).
+# Identity provider (OAuth): none in the lab (auth_mode ldap, 20-components.yml).
+# The baseline still references these names, so they keep example values.
 iac_oauth_base_url: https://sso.lab.local/oauth2
 iac_oauth_expected_audience: kafka-dev100
 iac_oauth_client_ids:

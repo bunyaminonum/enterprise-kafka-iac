@@ -1,17 +1,49 @@
 ---
 # =============================================================================
-# LAYER 3 - ENVIRONMENT OVERRIDES: dev100
+# LAYER 3 - ENVIRONMENT OVERRIDES: dev100 (lab)
 # Only what makes THIS environment different from shared/base + tier (nonprod) + topology (single-site).
-# (Replaces 95-overrides.yml of the previous layout: every shared layer is loaded before this file.)
+# Every shared layer is loaded before this file.
 # =============================================================================
-kafka_broker_custom_properties:
-  log.retention.hours: 12
 
-# The lab directory is OpenLDAP? Override the Active Directory mapping of the baseline:
-# kafka_broker_custom_properties:
-#   ldap.search.mode: GROUPS
-#   ldap.user.name.attribute: uid
-#   ldap.user.object.class: inetOrgPerson
-#   ldap.group.object.class: groupOfNames
-#   ldap.group.member.attribute: member
-#   ldap.group.member.attribute.pattern: "uid=(.*),ou=users,dc=lab,dc=local"
+# ---- KRaft on three servers: a controller and a broker on every server ----------------------------
+iac_kraft_colocated: true
+# Control Center shares cp-node3 with a KRaft controller: its Alertmanager moves away from port 9093.
+control_center_next_gen_dependency_alertmanager_port: 9195
+
+# ---- Broker properties (merged key by key with base and tier) --------------------------------------
+kafka_broker_custom_properties:
+  # dev100 keeps data for 12 hours (tier nonprod: 72)
+  log.retention.hours: 12
+  # LAB: the directory is OpenLDAP, not Active Directory. Group membership comes from the groups
+  # (groupOfNames/member) instead of the memberOf attribute of the user.
+  ldap.search.mode: GROUPS
+  ldap.user.name.attribute: uid
+  ldap.user.object.class: inetOrgPerson
+  ldap.group.object.class: groupOfNames
+  ldap.group.member.attribute: member
+  ldap.group.member.attribute.pattern: "uid=(.*),ou=users,dc=lab,dc=local"
+
+# ---- LAB: no identity provider, LDAP only (THY: shared/base) ----------------------------------------
+auth_mode: ldap
+iac_required_secrets:              # dictionary merge: false removes an entry of the baseline registry
+  vault_oauth_superuser_client_secret: false
+  vault_schema_registry_oauth_client_secret: false
+  vault_kafka_connect_oauth_client_secret: false
+  vault_kafka_rest_oauth_client_secret: false
+  vault_control_center_oauth_client_secret: false
+# cp-ansible reads these even with auth_mode ldap; upstream defaults, not used
+oauth_superuser_client_password: none
+schema_registry_oauth_password: password
+kafka_connect_oauth_password: password
+kafka_rest_oauth_password: password
+control_center_next_gen_oauth_password: password
+oauth_idp_cert_path: ""
+# LAB: MDS super user of the lab directory (baseline: svc-kafka-mds)
+mds_super_user: mds
+
+# ---- LAB: the file server on cp-node1 instead of Nexus ---------------------------------------------
+iac_artifact_url: http://10.0.0.140:8888
+
+# ---- LAB: 11.7 GB RAM per server (tier nonprod: broker -Xms3g -Xmx3g, Control Center -Xmx3g) --------
+iac_kafka_broker_heap: "-Xms2g -Xmx2g"
+iac_control_center_heap: "-Xmx2g"

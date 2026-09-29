@@ -1,0 +1,4 @@
+---
+# LAYER 5 - HOST: cp-node3 also runs Control Center with its Prometheus and Alertmanager.
+# Smaller Kafka Connect heap on this server only (dev100: -Xms512m -Xmx1g from the tier).
+iac_kafka_connect_heap: "-Xms256m -Xmx512m"
