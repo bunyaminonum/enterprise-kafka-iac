@@ -19,11 +19,44 @@ kafka_broker_custom_properties:
   unclean.leader.election.enable: false
   num.partitions: 6
   confluent.balancer.enable: true
-  # Brokers authenticate to the KRaft controllers with SCRAM-SHA-512 instead of the controllers' PLAIN
-  # (10-security.yml, "Broker and KRaft authentication").
+  # Mechanisms of the brokers, written out explicitly. cp-ansible derives the inter-broker value from the BROKER
+  # listener below; change both together.
+  #   broker <-> broker      SASL_SSL + SCRAM-SHA-512   BROKER listener :9091
+  #   broker -> controller   SASL_SSL + SCRAM-SHA-512   CONTROLLER listener :9093. Not the cp-ansible default: that
+  #                          would be the first value of kafka_controller_sasl_protocol (PLAIN, 10-security.yml).
+  sasl.mechanism.inter.broker.protocol: SCRAM-SHA-512
   sasl.mechanism.controller.protocol: SCRAM-SHA-512
   # Confluent Server license. Registered as a required secret for the prod tier; empty elsewhere (trial mode).
   confluent.license: "{{ vault_confluent_license | default('') }}"
+
+# ---- Listeners of the brokers, written out explicitly ----------------------------------------------
+# cp-ansible merges kafka_broker_custom_listeners key by key into its default listeners. Both entries repeat the
+# collection default of this repository (the rendered configuration does not change); they are written out so
+# that ports, TLS and SASL mechanisms of the brokers are visible and can be changed in one place.
+#   INTERNAL :9092  SASL_SSL  OAUTHBEARER    applications, Schema Registry, Connect, REST Proxy, Control Center
+#                                            (tokens issued by MDS after an LDAP login; auth_mode, 10-security.yml)
+#   BROKER   :9091  SASL_SSL  SCRAM-SHA-512  broker <-> broker (inter-broker listener), never used by clients
+# sasl_protocol of BROKER must equal sasl_protocol (10-security.yml). No Kerberos/GSSAPI, no client certificates.
+# Every component reads the listeners from its own host context: keep them at the all level (shared/base or
+# group_vars/all of an environment), never in a component group.
+kafka_broker_inter_broker_listener_name: broker
+kafka_broker_custom_listeners:
+  internal:
+    name: INTERNAL
+    port: 9092
+    ssl_enabled: true
+    ssl_mutual_auth_enabled: false
+    ssl_client_authentication: none
+    principal_mapping_rules: [DEFAULT]
+    sasl_protocol: OAUTH
+  broker:
+    name: BROKER
+    port: 9091
+    ssl_enabled: true
+    ssl_mutual_auth_enabled: false
+    ssl_client_authentication: none
+    principal_mapping_rules: [DEFAULT]
+    sasl_protocol: scram
 
 # Kernel tuning of the broker hosts. cp-ansible applies these values itself (sysctl, as root).
 kafka_broker_sysctl:
