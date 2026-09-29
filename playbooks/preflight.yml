@@ -10,6 +10,9 @@
 # Wrappers may pass iac_require_confirmation=false for read-only operations (health checks).
 # Every changing playbook imports this one, so a Tower job template runs it without any wrapper script.
 # =============================================================================
+
+
+
 - name: Preflight | guard rails
   hosts: all
   gather_facts: false
@@ -17,6 +20,9 @@
   any_errors_fatal: true
   tags: [always]
   tasks:
+    - name: debug
+      aansible.builtin.debug:
+      var: iac_static_validation
     - name: Replace registered secrets with placeholders (static validation)
       ansible.builtin.import_tasks: tasks/static_placeholders.yml
       when: iac_static_validation | default(false) | bool
