@@ -10,4 +10,6 @@
 #     num.network.threads: 8
 #   schema_registry_custom_properties:
 #     schema.compatibility.level: full
-{}
+schema_registry_custom_properties:
+  # qa only: new schema versions must stay compatible in both directions (base: backward)
+  schema.compatibility.level: full

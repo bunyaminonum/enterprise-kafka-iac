@@ -6,3 +6,6 @@
 # =============================================================================
 kafka_broker_custom_properties:
   log.retention.hours: 48
+
+# test only: load tests need a larger broker heap (tier nonprod: -Xms3g -Xmx3g)
+iac_kafka_broker_heap: "-Xms4g -Xmx4g"

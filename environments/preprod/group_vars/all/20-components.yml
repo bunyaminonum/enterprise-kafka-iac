@@ -10,4 +10,6 @@
 #     num.network.threads: 8
 #   schema_registry_custom_properties:
 #     schema.compatibility.level: full
-{}
+kafka_broker_custom_properties:
+  # preprod only: 4 days of retention (tier prod: 168 hours)
+  log.retention.hours: 96
