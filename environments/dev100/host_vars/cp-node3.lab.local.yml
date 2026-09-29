@@ -1,4 +1,6 @@
 ---
 # LAYER 5 - HOST: cp-node3 also runs Control Center with its Prometheus and Alertmanager.
-# Smaller Kafka Connect heap on this server only (dev100: -Xms512m -Xmx1g from the tier).
-iac_kafka_connect_heap: "-Xms256m -Xmx512m"
+# Kafka Connect scans its whole plugin path at start-up and needs more than 512 MB of heap (an -Xmx512m worker dies
+# with OutOfMemoryError). cp-node3 has the most memory left after the other components, so only this server gets
+# a larger Connect heap than the tier's -Xms512m -Xmx1g.
+iac_kafka_connect_heap: "-Xms512m -Xmx1536m"
