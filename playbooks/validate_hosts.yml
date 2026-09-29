@@ -31,7 +31,7 @@
   tags: [always]
   tasks:
     - name: Rootless checks
-      when: rootless_enabled | bool
+      when: rootless_enabled | default(false) | bool
       block:
         - name: Connected as the deploy user
           ansible.builtin.assert:
