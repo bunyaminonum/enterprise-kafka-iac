@@ -1,0 +1,30 @@
+---
+# dev100 - Platform sandbox (platform team only).
+# Single data center. node_id is PINNED per KRaft node and unique across controllers and brokers;
+# controller.quorum.voters is derived from it. Controllers and brokers run on dedicated hosts.
+all:
+  children:
+    env_dev100:
+      children:
+        kafka_controller:
+          hosts:
+            dev100-ctrl-01.lab.local: { node_id: 1 }
+            dev100-ctrl-02.lab.local: { node_id: 2 }
+            dev100-ctrl-03.lab.local: { node_id: 3 }
+        kafka_broker:
+          hosts:
+            dev100-broker-01.lab.local: { node_id: 101 }
+            dev100-broker-02.lab.local: { node_id: 102 }
+            dev100-broker-03.lab.local: { node_id: 103 }
+        schema_registry:
+          hosts:
+            dev100-sr-01.lab.local:
+        kafka_connect:
+          hosts:
+            dev100-connect-01.lab.local:
+        kafka_rest:
+          hosts:
+            dev100-rest-01.lab.local:
+        control_center_next_gen:
+          hosts:
+            dev100-c3-01.lab.local:
