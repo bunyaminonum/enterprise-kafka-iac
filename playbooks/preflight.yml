@@ -23,6 +23,11 @@
     - name: debug
       ansible.builtin.debug:
         var: iac_static_validation
+    - name: Secrets from the file on the hosts (iac_host_secrets_file)
+      ansible.builtin.import_tasks: tasks/host_secrets.yml
+      when:
+        - iac_host_secrets_file is defined
+        - not (iac_static_validation | default(false) | bool)
     - name: Replace registered secrets with placeholders (static validation)
       ansible.builtin.import_tasks: tasks/static_placeholders.yml
       when: iac_static_validation | default(false) | bool
