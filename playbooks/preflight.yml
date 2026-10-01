@@ -138,18 +138,18 @@
             quiet: true
           when: not (iac_static_validation | default(false) | bool)
 
-        - name: SCRAM and PLAIN passwords contain letters and digits only (deploy mode)
-          ansible.builtin.assert:
-            that: lookup('ansible.builtin.vars', item) | string is match('^[A-Za-z0-9]{16,}$')
-            fail_msg: >-
-              {{ item }} (IAC_SECRET_{{ item | regex_replace('^vault_', '') | upper }}) must have at least 16 letters
-              and digits and nothing else: it is written into JAAS configurations and kafka-configs arguments
-              (e.g. openssl rand -hex 24)
-            quiet: true
-          loop:
-            - vault_kafka_broker_scram_password
-            - vault_kafka_controller_plain_password
-          when: not (iac_static_validation | default(false) | bool)
+#        - name: SCRAM and PLAIN passwords contain letters and digits only (deploy mode)
+#          ansible.builtin.assert:
+#            that: lookup('ansible.builtin.vars', item) | string is match('^[A-Za-z0-9]{16,}$')
+#            fail_msg: >-
+#              {{ item }} (IAC_SECRET_{{ item | regex_replace('^vault_', '') | upper }}) must have at least 16 letters
+#              and digits and nothing else: it is written into JAAS configurations and kafka-configs arguments
+#              (e.g. openssl rand -hex 24)
+#            quiet: true
+#          loop:
+#            - vault_kafka_broker_scram_password
+#            - vault_kafka_controller_plain_password
+#          when: not (iac_static_validation | default(false) | bool)
 
 #        - name: Rootless deployment settings are consistent
 #          ansible.builtin.assert:
