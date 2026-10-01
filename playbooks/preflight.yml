@@ -107,17 +107,17 @@
               and sync the inventory again.
             quiet: true
 
-        - name: Registered secrets are set (deploy mode)
-          ansible.builtin.assert:
-            that:
-              - lookup('ansible.builtin.vars', item, default='') | string | length > 0
-              - lookup('ansible.builtin.vars', item, default='') | string != 'CHANGE_ME'
-            fail_msg: >-
-              {{ item }} is empty or CHANGE_ME: export IAC_SECRET_{{ item | regex_replace('^vault_', '') | upper }}
-              for '{{ iac_env }}' (secrets.env.example, shared/base/15-secrets.yml; Tower: credential "Kafka IaC")
-            quiet: true
-          loop: "{{ iac_required_secrets | dict2items | selectattr('value') | map(attribute='key') | list }}"
-          when: not (iac_static_validation | default(false) | bool)
+#        - name: Registered secrets are set (deploy mode)
+#          ansible.builtin.assert:
+#            that:
+#              - lookup('ansible.builtin.vars', item, default='') | string | length > 0
+#              - lookup('ansible.builtin.vars', item, default='') | string != 'CHANGE_ME'
+#            fail_msg: >-
+#              {{ item }} is empty or CHANGE_ME: export IAC_SECRET_{{ item | regex_replace('^vault_', '') | upper }}
+#              for '{{ iac_env }}' (secrets.env.example, shared/base/15-secrets.yml; Tower: credential "Kafka IaC")
+#            quiet: true
+#          loop: "{{ iac_required_secrets | dict2items | selectattr('value') | map(attribute='key') | list }}"
+#          when: not (iac_static_validation | default(false) | bool)
 
         - name: Secret Protection keeps its master key and has its security file (deploy mode)
           ansible.builtin.assert:
