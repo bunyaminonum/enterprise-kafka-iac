@@ -67,8 +67,8 @@ iac_config_secrets_env_prefix: CP_SECRET_
 iac_config_secrets_dir: /var/ssl/private/iac-secrets
 # Owner of the secret directory and of the environment files: root, because systemd (the system manager) reads the
 # EnvironmentFile before it starts the service as its service account. A rootless deployment would use the deploy user.
-iac_config_secrets_owner: "{{ deployment_user if rootless_enabled | bool else 'root' }}"
-iac_config_secrets_group: "{{ deployment_group if rootless_enabled | bool else 'root' }}"
+iac_config_secrets_owner: "{{ deployment_user if rootless_enabled | default(false) | bool else 'root' }}"
+iac_config_secrets_group: "{{ deployment_group if rootless_enabled | default(false) | bool else 'root' }}"
 iac_config_secrets_key_patterns:
   - '.*password.*'
   - '.*basic.auth.user.info.*'
