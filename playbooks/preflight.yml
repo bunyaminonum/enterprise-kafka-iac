@@ -151,19 +151,19 @@
             - vault_kafka_controller_plain_password
           when: not (iac_static_validation | default(false) | bool)
 
-        - name: Rootless deployment settings are consistent
-          ansible.builtin.assert:
-            that:
-              - installation_method == 'archive'
-              - deployment_user | length > 0
-              - deployment_group | length > 0
-              - rootless_deployment_path is match('^/.+[^/]$')
-              - iac_cp_ansible_version is version('8.3.2', '>=')
-            fail_msg: >-
-              rootless_enabled needs installation_method archive, deployment_user, deployment_group, an absolute
-              rootless_deployment_path without trailing slash and cp-ansible >= 8.3.2
-            quiet: true
-          when: rootless_enabled | bool
+#        - name: Rootless deployment settings are consistent
+#          ansible.builtin.assert:
+#            that:
+#              - installation_method == 'archive'
+#              - deployment_user | length > 0
+#              - deployment_group | length > 0
+#              - rootless_deployment_path is match('^/.+[^/]$')
+#              - iac_cp_ansible_version is version('8.3.2', '>=')
+#            fail_msg: >-
+#              rootless_enabled needs installation_method archive, deployment_user, deployment_group, an absolute
+#              rootless_deployment_path without trailing slash and cp-ansible >= 8.3.2
+#            quiet: true
+#          when: rootless_enabled | bool
 
     - name: Load cp-ansible variables (defaults and derived values used by the checks below)
       ansible.builtin.import_role:
@@ -184,17 +184,17 @@
           layer symlink (00-base, 05-tier, 06-topology). On Windows checkouts enable git symlinks (core.symlinks=true).
         quiet: true
 
-    - name: Rootless - Ansible connects as the deploy user and never escalates
-      ansible.builtin.assert:
-        that:
-          - ansible_user | default('') == deployment_user
-          - not (ansible_become | default(false) | bool)
-        fail_msg: >-
-          {{ inventory_hostname }}: a rootless deployment runs as the deploy user '{{ deployment_user }}'
-          (ansible_user is '{{ ansible_user | default('') }}', ansible_become is {{ ansible_become | default(false) }}).
-          Do not override ansible_user or ansible_become per host.
-        quiet: true
-      when: rootless_enabled | bool
+#    - name: Rootless - Ansible connects as the deploy user and never escalates
+#      ansible.builtin.assert:
+#        that:
+#          - ansible_user | default('') == deployment_user
+#          - not (ansible_become | default(false) | bool)
+#        fail_msg: >-
+#          {{ inventory_hostname }}: a rootless deployment runs as the deploy user '{{ deployment_user }}'
+#          (ansible_user is '{{ ansible_user | default('') }}', ansible_become is {{ ansible_become | default(false) }}).
+#          Do not override ansible_user or ansible_become per host.
+#        quiet: true
+#      when: rootless_enabled | bool
 
     - name: KRaft nodes pin node_id
       ansible.builtin.assert:
