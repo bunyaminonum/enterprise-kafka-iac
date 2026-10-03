@@ -23,6 +23,18 @@ kafka_broker_custom_properties:
   ldap.group.member.attribute: member
   ldap.group.member.attribute.pattern: "uid=(.*),ou=users,dc=lab,dc=local"
 
+
+ssl_enabled: false
+ssl_custom_certs: false
+kafka_controller_listeners:
+  controller:
+    ssl_enabled: false
+kafka_broker_custom_listeners:
+  internal:
+    ssl_enabled: false
+  broker:
+    ssl_enabled: false
+
 # ---- LAB: no identity provider, LDAP only (THY: shared/base) ----------------------------------------
 auth_mode: ldap
 iac_required_secrets:              # dictionary merge: false removes an entry of the baseline registry
