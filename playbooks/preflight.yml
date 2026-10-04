@@ -13,6 +13,9 @@
 
 
 
+- name: Secrets from the hosts (iac_secrets_source host)
+  ansible.builtin.import_playbook: secrets_from_hosts.yml
+
 - name: Preflight | guard rails
   hosts: all
   gather_facts: false
