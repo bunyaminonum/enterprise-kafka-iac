@@ -13,6 +13,16 @@ control_center_next_gen_dependency_alertmanager_port: 9195
 #secrets come from the environment of the automation account on the hosts ----
 iac_secrets_from_host_env: true
 
+# ---- LAB (THY simulation): the archives live in the EE image, the hosts have no route to Nexus ----------
+confluent_archive_file_source: "/opt/cp-artifacts/confluent-{{ confluent_package_version }}.tar.gz"
+confluent_archive_file_remote: false
+confluent_archive_control_center_next_gen_file_source: "/opt/cp-artifacts/confluent-control-center-next-gen-{{ confluent_control_center_next_gen_package_version }}.tar.gz"
+confluent_archive_control_center_next_gen_file_remote: false
+confluent_cli_archive_file_source: "/opt/cp-artifacts/confluent_{{ confluent_cli_version }}_linux_amd64.tar.gz"
+confluent_cli_archive_file_remote: false
+jmxexporter_jar_url: "/opt/cp-artifacts/jmx_prometheus_javaagent-{{ jmxexporter_version }}.jar"
+jmxexporter_url_remote: false
+
 # ---- Broker properties (merged key by key with base and tier) --------------------------------------
 kafka_broker_custom_properties:
   # dev100 keeps data for 12 hours (tier nonprod: 72)
