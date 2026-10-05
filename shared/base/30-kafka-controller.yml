@@ -26,8 +26,10 @@ kafka_controller_custom_properties:
   listener.name.broker.scram-sha-512.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
   listener.name.controller.scram-sha-512.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
   listener.name.controller.plain.sasl.jaas.config: "{{ iac_jaas_plain_kafka }}"
-
-
+kafka_controller_custom_client_properties:  
+    config.providers: env
+    config.providers.env.class: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+    config.providers.env.param.allowlist.pattern: '^IAC_SECRET_.*'
 # merge semantics: only KAFKA_HEAP_OPTS is replaced; upstream keys (KAFKA_OPTS, LOG_DIR, ...) are kept.
 kafka_controller_service_environment_overrides:
   KAFKA_HEAP_OPTS: "{{ iac_kafka_controller_heap }} {{ iac_jvm_g1_opts }}"
