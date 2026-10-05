@@ -23,11 +23,12 @@
     - name: debug
       ansible.builtin.debug:
         var: iac_static_validation
-    - name: Secrets from the file on the hosts (iac_host_secrets_file)
-      ansible.builtin.import_tasks: tasks/host_secrets.yml
+    - name: Secrets from the environment of the automation account on the hosts
+      ansible.builtin.import_tasks: tasks/host_env_secrets.yml
       when:
-        - iac_host_secrets_file is defined
+        - iac_secrets_from_host_env | default(false) | bool
         - not (iac_static_validation | default(false) | bool)
+
     - name: Replace registered secrets with placeholders (static validation)
       ansible.builtin.import_tasks: tasks/static_placeholders.yml
       when: iac_static_validation | default(false) | bool
@@ -112,17 +113,17 @@
               and sync the inventory again.
             quiet: true
 
-#        - name: Registered secrets are set (deploy mode)
-#          ansible.builtin.assert:
-#            that:
-#              - lookup('ansible.builtin.vars', item, default='') | string | length > 0
-#              - lookup('ansible.builtin.vars', item, default='') | string != 'CHANGE_ME'
-#            fail_msg: >-
-#              {{ item }} is empty or CHANGE_ME: export IAC_SECRET_{{ item | regex_replace('^vault_', '') | upper }}
-#              for '{{ iac_env }}' (secrets.env.example, shared/base/15-secrets.yml; Tower: credential "Kafka IaC")
-#            quiet: true
-#          loop: "{{ iac_required_secrets | dict2items | selectattr('value') | map(attribute='key') | list }}"
-#          when: not (iac_static_validation | default(false) | bool)
+        - name: Registered secrets are set (deploy mode)
+          ansible.builtin.assert:
+            that:
+              - lookup('ansible.builtin.vars', item, default='') | string | length > 0
+              - lookup('ansible.builtin.vars', item, default='') | string != 'CHANGE_ME'
+            fail_msg: >-
+              {{ item }} is empty or CHANGE_ME: export IAC_SECRET_{{ item | regex_replace('^vault_', '') | upper }}
+              for '{{ iac_env }}' (secrets.env.example, shared/base/15-secrets.yml; Tower: credential "Kafka IaC")
+            quiet: true
+          loop: "{{ iac_required_secrets | dict2items | selectattr('value') | map(attribute='key') | list }}"
+          when: not (iac_static_validation | default(false) | bool)
 
         - name: Secret Protection keeps its master key and has its security file (deploy mode)
           ansible.builtin.assert:
