@@ -23,6 +23,19 @@ confluent_cli_archive_file_remote: false
 jmxexporter_jar_url: "/opt/cp-artifacts/jmx_prometheus_javaagent-{{ jmxexporter_version }}.jar"
 jmxexporter_url_remote: false
 
+
+# ---- LAB: no SSL (THY: shared/base) ----------------------------------------------------------------
+ssl_enabled: false
+ssl_custom_certs: false
+kafka_controller_listeners:
+  controller:
+    ssl_enabled: false
+kafka_broker_custom_listeners:
+  internal:
+    ssl_enabled: false
+  broker:
+    ssl_enabled: false
+    
 # ---- Broker properties (merged key by key with base and tier) --------------------------------------
 kafka_broker_custom_properties:
   # dev100 keeps data for 12 hours (tier nonprod: 72)
