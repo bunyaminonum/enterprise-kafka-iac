@@ -5,4 +5,18 @@ iac_kafka_rest_heap: "-Xms1g -Xmx1g"
 kafka_rest_service_environment_overrides:
   KAFKAREST_HEAP_OPTS: "{{ iac_kafka_rest_heap }} {{ iac_jvm_g1_opts }}"
 
-kafka_rest_custom_properties: {}
+iac_mds_urls: "{% for h in groups['kafka_broker'] %}http{{ 's' if ssl_enabled | bool else '' }}://{{ h }}:8090{{ ',' if not loop.last else '' }}{% endfor %}"
+
+iac_jaas_oauth_rest: >-
+  org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required username="{{ kafka_rest_ldap_user }}" password="${env:IAC_SECRET_KAFKA_REST_LDAP_PASSWORD}" metadataServerUrls="{{ iac_mds_urls }}";
+
+kafka_rest_custom_properties:
+    config.providers: env
+    config.providers.env.class: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+    config.providers.env.param.allowlist.pattern: '^IAC_SECRET_.*'
+    client.config.providers: env
+    client.config.providers.env.class: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+    client.config.providers.env.param.allowlist.pattern: '^IAC_SECRET_.*'
+    client.confluent.monitoring.interceptor.sasl.jaas.config: "{{ iac_jaas_oauth_rest }}"
+    client.sasl.jaas.config: "{{ iac_jaas_oauth_rest }}"
+    confluent.metadata.basic.auth.user.info: "{{ kafka_rest_ldap_user }}:${env:IAC_SECRET_KAFKA_REST_LDAP_PASSWORD}"

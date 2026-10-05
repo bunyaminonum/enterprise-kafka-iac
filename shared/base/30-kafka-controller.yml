@@ -3,6 +3,15 @@
 # because cp-ansible uses the same node_id host variable for both roles)
 iac_kafka_controller_heap: "-Xms2g -Xmx2g"
 
+
+
+# JAAS lines. Only the password is a reference; user names and the rest come from the same variables cp-ansible uses.
+iac_jaas_scram_kafka: 'org.apache.kafka.common.security.scram.ScramLoginModule required username="kafka" password="${env:IAC_SECRET_KAFKA_BROKER_SCRAM_PASSWORD}";'
+iac_jaas_plain_kafka: >-
+  org.apache.kafka.common.security.plain.PlainLoginModule required username="kafka" password="${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}" user_kafka="${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"{% for u in sasl_plain_users.values() if u.principal != "kafka" %} user_{{ u.principal }}="{{ u.password }}"{% endfor %};
+
+
+
 kafka_controller_custom_properties:
   log.dirs: "{{ iac_data_dir }}/controller"
   # Mechanisms of the controllers, written out explicitly. cp-ansible derives the same values from the listeners
@@ -11,6 +20,15 @@ kafka_controller_custom_properties:
   #   inter-broker settings        SCRAM-SHA-512  (the controllers also carry the BROKER listener settings)
   sasl.mechanism.controller.protocol: PLAIN
   sasl.mechanism.inter.broker.protocol: SCRAM-SHA-512
+  config.providers: env
+  config.providers.env.class: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+  config.providers.env.param.allowlist.pattern: '^IAC_SECRET_.*'
+  confluent.metadata.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
+  confluent.metrics.reporter.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
+  listener.name.broker.scram-sha-512.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
+  listener.name.controller.scram-sha-512.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
+  listener.name.controller.plain.sasl.jaas.config: "{{ iac_jaas_plain_kafka }}"
+
 
 # merge semantics: only KAFKA_HEAP_OPTS is replaced; upstream keys (KAFKA_OPTS, LOG_DIR, ...) are kept.
 kafka_controller_service_environment_overrides:
@@ -48,3 +66,8 @@ kafka_controller_quorum_voters: >-
       else (groups['kafka_controller'] | map('extract', hostvars, 'node_id') | list))
      | zip(groups['kafka_controller']) | map('join', '@')
      | product([':' ~ kafka_controller_port | default(9093)]) | map('join') | join(',') }}
+
+
+
+# ---- KRaft controllers ------------------------------------------------------------------------------
+

@@ -61,20 +61,7 @@ iac_secrets_dir: "{{ lookup('ansible.builtin.env', 'IAC_SECRETS_DIR', default=pl
 # run with the environment of the service.
 # The key patterns are the ones cp-ansible's Secret Protection encrypts (roles/common/tasks/secrets_protection.yml).
 # A changed secret is written by site but only read at startup: run the restart playbook afterwards.
-iac_config_secrets_enabled: true
-iac_config_secrets_provider: env
-iac_config_secrets_env_prefix: CP_SECRET_
-iac_config_secrets_dir: /var/ssl/private/iac-secrets
-# Owner of the secret directory and of the environment files: root, because systemd (the system manager) reads the
-# EnvironmentFile before it starts the service as its service account. A rootless deployment would use the deploy user.
-iac_config_secrets_owner: "{{ deployment_user if rootless_enabled | default(false) | bool else 'root' }}"
-iac_config_secrets_group: "{{ deployment_group if rootless_enabled | default(false) | bool else 'root' }}"
-iac_config_secrets_key_patterns:
-  - '.*password.*'
-  - '.*basic.auth.user.info.*'
-  - '^ldap.java.naming.security.credentials$'
-  - '^confluent.license$'
-  - '.*sasl.jaas.config'
+
 # Secret Protection stays off; regenerate_masterkey false keeps a re-enabled Secret Protection from
 # generating a new master key on every run.
 secrets_protection_enabled: false

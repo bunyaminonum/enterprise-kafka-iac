@@ -4,7 +4,11 @@ iac_kafka_connect_heap: "-Xms1g -Xmx2g"
 
 kafka_connect_service_environment_overrides:
   KAFKA_HEAP_OPTS: "{{ iac_kafka_connect_heap }}"
+iac_mds_urls: "{% for h in groups['kafka_broker'] %}http{{ 's' if ssl_enabled | bool else '' }}://{{ h }}:8090{{ ',' if not loop.last else '' }}{% endfor %}"
 
+
+iac_jaas_oauth_connect: >-
+  org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required username="{{ kafka_connect_ldap_user }}" password="${env:IAC_SECRET_KAFKA_CONNECT_LDAP_PASSWORD}" metadataServerUrls="{{ iac_mds_urls }}";
 # Converter credentials: with RBAC, Schema Registry rejects anonymous requests, but cp-ansible only writes the
 # converters' URL and TLS settings. Without these lines every Avro/Protobuf/JSON Schema task fails with 401
 # while the connector itself still reports RUNNING. The values are moved out of the file (config_secrets.yml).
@@ -13,6 +17,17 @@ kafka_connect_custom_properties:
   offset.storage.replication.factor: 3
   status.storage.replication.factor: 3
   key.converter.basic.auth.credentials.source: USER_INFO
-  key.converter.schema.registry.basic.auth.user.info: "{{ kafka_connect_ldap_user }}:{{ kafka_connect_ldap_password }}"
   value.converter.basic.auth.credentials.source: USER_INFO
-  value.converter.schema.registry.basic.auth.user.info: "{{ kafka_connect_ldap_user }}:{{ kafka_connect_ldap_password }}"
+  config.providers: "secret,env"
+  config.providers.env.class: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+  config.providers.env.param.allowlist.pattern: '^IAC_SECRET_.*'
+  config.providers.secret.param.kafkastore.sasl.jaas.config: "{{ iac_jaas_oauth_connect }}"
+  confluent.metadata.basic.auth.user.info: "{{ kafka_connect_ldap_user }}:${env:IAC_SECRET_KAFKA_CONNECT_LDAP_PASSWORD}"
+  consumer.confluent.monitoring.interceptor.sasl.jaas.config: "{{ iac_jaas_oauth_connect }}"
+  consumer.sasl.jaas.config: "{{ iac_jaas_oauth_connect }}"
+  producer.confluent.monitoring.interceptor.sasl.jaas.config: "{{ iac_jaas_oauth_connect }}"
+  producer.sasl.jaas.config: "{{ iac_jaas_oauth_connect }}"
+  sasl.jaas.config: "{{ iac_jaas_oauth_connect }}"
+  key.converter.schema.registry.basic.auth.user.info: "{{ kafka_connect_ldap_user }}:${env:IAC_SECRET_KAFKA_CONNECT_LDAP_PASSWORD}"
+  value.converter.schema.registry.basic.auth.user.info: "{{ kafka_connect_ldap_user }}:${env:IAC_SECRET_KAFKA_CONNECT_LDAP_PASSWORD}"
+  

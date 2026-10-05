@@ -5,5 +5,19 @@ iac_schema_registry_heap: "-Xms1g -Xmx1g"
 schema_registry_service_environment_overrides:
   SCHEMA_REGISTRY_HEAP_OPTS: "{{ iac_schema_registry_heap }} {{ iac_jvm_g1_opts }}"
 
+iac_mds_urls: "{% for h in groups['kafka_broker'] %}http{{ 's' if ssl_enabled | bool else '' }}://{{ h }}:8090{{ ',' if not loop.last else '' }}{% endfor %}"
+
+iac_jaas_oauth_schema_registry: >-
+  org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required username="{{ schema_registry_ldap_user }}" password="${env:IAC_SECRET_SCHEMA_REGISTRY_LDAP_PASSWORD}" metadataServerUrls="{{ iac_mds_urls }}";
+
+
 schema_registry_custom_properties:
   schema.compatibility.level: backward      # TODO(OD-10): schema governance decision
+  schema_registry_custom_properties:
+  config.providers: env
+  config.providers.env.class: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+  config.providers.env.param.allowlist.pattern: '^IAC_SECRET_.*'
+  confluent.metadata.basic.auth.user.info: "{{ schema_registry_ldap_user }}:${env:IAC_SECRET_SCHEMA_REGISTRY_LDAP_PASSWORD}"
+  kafkastore.sasl.jaas.config: "{{ iac_jaas_oauth_schema_registry }}"
+
+
