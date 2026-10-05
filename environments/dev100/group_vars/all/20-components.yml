@@ -8,7 +8,7 @@
 # ---- KRaft on three servers: a controller and a broker on every server ----------------------------
 iac_kraft_colocated: true
 # Control Center shares cp-node3 with a KRaft controller: its Alertmanager moves away from port 9093.
-#control_center_next_gen_dependency_alertmanager_port: 9195
+control_center_next_gen_dependency_alertmanager_port: 9195
 
 #secrets come from the environment of the automation account on the hosts ----
 iac_secrets_from_host_env: true
