@@ -5,10 +5,8 @@ iac_kafka_controller_heap: "-Xms2g -Xmx2g"
 
 
 
-# JAAS lines. Only the password is a reference; user names and the rest come from the same variables cp-ansible uses.
 iac_jaas_scram_kafka: 'org.apache.kafka.common.security.scram.ScramLoginModule required username="kafka" password="${env:IAC_SECRET_KAFKA_BROKER_SCRAM_PASSWORD}";'
-iac_jaas_plain_kafka: >-
-  org.apache.kafka.common.security.plain.PlainLoginModule required username="kafka" password="${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}" user_kafka="${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"{% for u in sasl_plain_users.values() if u.principal != "kafka" %} user_{{ u.principal }}="{{ u.password }}"{% endfor %};
+iac_jaas_plain_kafka: 'org.apache.kafka.common.security.plain.PlainLoginModule required username="kafka" password="${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}";'
 
 
 
