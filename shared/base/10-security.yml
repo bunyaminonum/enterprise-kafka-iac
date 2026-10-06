@@ -136,7 +136,7 @@ sasl_scram_users:
 sasl_plain_users:
   admin:
     principal: kafka
-    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
+    password: "{{ vault_kafka_broker_scram_password }}"
   client:
     principal: client
     password: "{{ (vault_kafka_controller_plain_password ~ ':client') | hash('sha256') }}"

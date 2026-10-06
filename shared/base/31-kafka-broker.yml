@@ -42,7 +42,7 @@ kafka_broker_custom_properties:
   confluent.metrics.reporter.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
   listener.name.broker.scram-sha-512.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
   listener.name.controller.scram-sha-512.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
-  listener.name.controller.plain.sasl.jaas.config: "{{ iac_jaas_plain_kafka }}"
+  #listener.name.controller.plain.sasl.jaas.config: "{{ iac_jaas_plain_kafka }}"
 
 # ---- Listeners of the brokers, written out explicitly ----------------------------------------------
 # cp-ansible merges kafka_broker_custom_listeners key by key into its default listeners. Both entries repeat the
