@@ -21,10 +21,10 @@ kafka_controller_custom_properties:
   config.providers: env
   config.providers.env.class: org.apache.kafka.common.config.provider.EnvVarConfigProvider
   config.providers.env.param.allowlist.pattern: '^IAC_SECRET_.*'
-  confluent.metadata.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
-  confluent.metrics.reporter.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
-  listener.name.broker.scram-sha-512.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
-  listener.name.controller.scram-sha-512.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
+  #confluent.metadata.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
+  #confluent.metrics.reporter.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
+  #listener.name.broker.scram-sha-512.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
+  #listener.name.controller.scram-sha-512.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
   #listener.name.controller.plain.sasl.jaas.config: "{{ iac_jaas_plain_kafka }}"
 kafka_controller_custom_client_properties:  
     config.providers: env
