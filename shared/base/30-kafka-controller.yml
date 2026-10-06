@@ -25,6 +25,9 @@ kafka_controller_custom_client_properties:
 kafka_controller_service_environment_overrides:
   KAFKA_HEAP_OPTS: "{{ iac_kafka_controller_heap }} {{ iac_jvm_g1_opts }}"
 
+kafka_controller_service_overrides:
+  EnvironmentFile: /opt/confluent/kafka.env
+  
 # ---- Listener of the controllers, written out explicitly -------------------------------------------
 # cp-ansible has no kafka_controller_custom_listeners: this dictionary replaces its default completely.
 # The values equal the collection default of this repository (the rendered configuration does not change);
