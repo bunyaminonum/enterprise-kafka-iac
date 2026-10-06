@@ -111,19 +111,19 @@ kafka_controller_sasl_protocol: plain,scram
 sasl_scram_users:
   admin:
     principal: kafka
-    password: "${env:IAC_SECRET_KAFKA_BROKER_LDAP_PASSWORD}"
+    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
   client:
     principal: client
-    password: "${env:IAC_SECRET_KAFKA_BROKER_LDAP_PASSWORD}"
+    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
   schema_registry:
     principal: schema_registry
     password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
   kafka_connect:
     principal: kafka_connect
-    password: "${env:IAC_SECRET_KAFKA_CONNECT_LDAP_PASSWORD}"
+    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
   kafka_rest:
     principal: kafka_rest
-    password: "${env:IAC_SECRET_SCHEMA_REGISTRY_LDAP_PASSWORD}"
+    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
   ksql:
     principal: ksql
     password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
