@@ -8,11 +8,6 @@ iac_kafka_broker_heap: "-Xms6g -Xmx6g"
 kafka_broker_service_environment_overrides:
   KAFKA_HEAP_OPTS: "{{ iac_kafka_broker_heap }} {{ iac_jvm_g1_opts }}"
 
-
-# JAAS lines. Only the password is a reference; user names and the rest come from the same variables cp-ansible uses.
-iac_jaas_scram_kafka: 'org.apache.kafka.common.security.scram.ScramLoginModule required username="kafka" password="${env:IAC_SECRET_KAFKA_BROKER_SCRAM_PASSWORD}";'
-iac_jaas_plain_kafka: 'org.apache.kafka.common.security.plain.PlainLoginModule required username="kafka" password="${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}";'
-
 # The same dictionary is also populated by 10-security.yml (ldap.*). Files of one layer directory are
 # merged in lexical order, so all keys end up in the final server.properties.
 kafka_broker_custom_properties:
@@ -39,10 +34,7 @@ kafka_broker_custom_properties:
   ldap.java.naming.security.credentials: "${env:IAC_SECRET_LDAP_BIND_PASSWORD}"
   confluent.basic.auth.user.info: "{{ schema_registry_ldap_user }}:${env:IAC_SECRET_SCHEMA_REGISTRY_LDAP_PASSWORD}"
   kafka.rest.confluent.metadata.basic.auth.user.info: "{{ kafka_broker_ldap_user }}:${env:IAC_SECRET_KAFKA_BROKER_LDAP_PASSWORD}"
-  #confluent.metrics.reporter.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
-  #listener.name.broker.scram-sha-512.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
-  #listener.name.controller.scram-sha-512.sasl.jaas.config: "{{ iac_jaas_scram_kafka }}"
-  #listener.name.controller.plain.sasl.jaas.config: "{{ iac_jaas_plain_kafka }}"
+
 
 # ---- Listeners of the brokers, written out explicitly ----------------------------------------------
 # cp-ansible merges kafka_broker_custom_listeners key by key into its default listeners. Both entries repeat the

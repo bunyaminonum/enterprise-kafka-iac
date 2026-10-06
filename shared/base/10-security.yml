@@ -111,28 +111,28 @@ kafka_controller_sasl_protocol: plain,scram
 sasl_scram_users:
   admin:
     principal: kafka
-    password: "{{ vault_kafka_broker_scram_password }}"
+    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
   client:
     principal: client
-    password: "{{ (vault_kafka_broker_scram_password ~ ':client') | hash('sha256') }}"
+    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
   schema_registry:
     principal: schema_registry
-    password: "{{ (vault_kafka_broker_scram_password ~ ':schema_registry') | hash('sha256') }}"
+    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
   kafka_connect:
     principal: kafka_connect
-    password: "{{ (vault_kafka_broker_scram_password ~ ':kafka_connect') | hash('sha256') }}"
+    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
   kafka_rest:
     principal: kafka_rest
-    password: "{{ (vault_kafka_broker_scram_password ~ ':kafka_rest') | hash('sha256') }}"
+    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
   ksql:
     principal: ksql
-    password: "{{ (vault_kafka_broker_scram_password ~ ':ksql') | hash('sha256') }}"
+    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
   control_center_next_gen:
     principal: control_center
-    password: "{{ (vault_kafka_broker_scram_password ~ ':control_center_next_gen') | hash('sha256') }}"
+    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
   kafka_connect_replicator:
     principal: kafka_connect_replicator
-    password: "{{ (vault_kafka_broker_scram_password ~ ':kafka_connect_replicator') | hash('sha256') }}"
+    password: "${env:IAC_SECRET_KAFKA_CONTROLLER_PLAIN_PASSWORD}"
 sasl_plain_users:
   admin:
     principal: kafka
