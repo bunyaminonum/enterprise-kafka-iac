@@ -16,6 +16,7 @@ confluent_control_center_next_gen_package_version: "2.5.0"   # TODO(OD-09): conf
 # Confluent CLI on every host (RBAC and secret operations). Pinned: its archive name is derived from it.
 confluent_cli_version: "4.72.0"
 
+ansible_become_flags: "-H -S -n -E" 
 # ---- Installation: Confluent archives, root on the hosts ---------------------
 # Ansible connects as the automation account of the environment (command line: the SSH user of the run, Tower:
 # the machine credential) and becomes root on the managed hosts (ansible_become, below). Ansible needs GENERAL
