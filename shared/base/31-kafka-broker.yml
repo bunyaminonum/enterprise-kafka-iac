@@ -35,6 +35,11 @@ kafka_broker_custom_properties:
   confluent.basic.auth.user.info: "{{ schema_registry_ldap_user }}:${env:IAC_SECRET_SCHEMA_REGISTRY_LDAP_PASSWORD}"
   kafka.rest.confluent.metadata.basic.auth.user.info: "{{ kafka_broker_ldap_user }}:${env:IAC_SECRET_KAFKA_BROKER_LDAP_PASSWORD}"
 
+kafka_broker_custom_client_properties:  
+    config.providers: env
+    config.providers.env.class: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+    config.providers.env.param.allowlist.pattern: '^IAC_SECRET_.*'
+
 
 kafka_broker_service_overrides:
   EnvironmentFile: /opt/confluent/kafka.env
